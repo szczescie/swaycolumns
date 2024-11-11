@@ -77,7 +77,10 @@ pub const ErrorReadRaw = error{MessageTooBig} || posix.ReadError;
 
 /// Read a single Sway IPC message without parsing.
 pub fn readRaw(self: @This()) ErrorReadRaw![]const u8 {
-    _ = try self.sock.read(self.buf[0..14]);
+    _ = self.sock.read(self.buf[0..14]) catch |err| {
+        log.err("unable to read message header", .{});
+        return err;
+    };
     const len: u32 = @bitCast(self.buf[6..10].*);
     if (len > self.buf.len) {
         log.err(
@@ -86,7 +89,10 @@ pub fn readRaw(self: @This()) ErrorReadRaw![]const u8 {
         );
         return ErrorRead.MessageTooBig;
     }
-    _ = try self.sock.read(self.buf[0..len]);
+    _ = self.sock.read(self.buf[0..len]) catch |err| {
+        log.err("unable to read message content", .{});
+        return err;
+    };
     return self.buf[0..len];
 }
 
@@ -101,7 +107,10 @@ pub fn read(self: @This(), comptime T: type) ErrorRead!T {
         fba.allocator(),
         string,
         .{ .ignore_unknown_fields = true },
-    );
+    ) catch |err| {
+        log.err("json parse failed", .{});
+        return err;
+    };
 }
 
 pub const ErrorWriteReadRaw = ErrorReadRaw || posix.WriteError;
