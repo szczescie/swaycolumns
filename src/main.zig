@@ -27,21 +27,20 @@ pub fn main() (Socket.ErrorSwaysock || Socket.ErrorWriteRead)!void {
         };
         inline for (subcommands) |subcommand| {
             const argument, const method = subcommand;
-            if (mem.eql(u8, mem.span(os.argv[1]), argument)) {
-                const Parameter = @typeInfo(@TypeOf(method)).Fn.params[1].type.?;
-                const fields = @typeInfo(Parameter).Enum.fields;
-                inline for (fields) |field| {
-                    if (mem.eql(u8, mem.span(os.argv[2]), field.name)) {
-                        return @call(
-                            .auto,
-                            method,
-                            .{
-                                columns,
-                                @field(Parameter, field.name),
-                            },
-                        );
-                    }
+            if (!mem.eql(u8, mem.span(os.argv[1]), argument)) {
+                continue;
+            }
+            const Parameter = @typeInfo(@TypeOf(method)).Fn.params[1].type.?;
+            const fields = @typeInfo(Parameter).Enum.fields;
+            inline for (fields) |field| {
+                if (!mem.eql(u8, mem.span(os.argv[2]), field.name)) {
+                    continue;
                 }
+                return @call(
+                    .auto,
+                    method,
+                    .{ columns, @field(Parameter, field.name) },
+                );
             }
         }
     } else if (os.argv.len == 2) {
