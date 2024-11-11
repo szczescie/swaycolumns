@@ -1,5 +1,6 @@
 const std = @import("std");
 const debug = std.debug;
+const log = std.log;
 const mem = std.mem;
 
 const Socket = @import("Socket.zig");
@@ -9,6 +10,7 @@ json_str: []const u8,
 pub fn init(socket: Socket) Socket.ErrorWriteReadRaw!@This() {
     var tree: @This() = undefined;
     tree.json_str = try socket.writeReadRaw(.tree, "");
+    log.debug("got tree of length: {d}\n", .{tree.json_str.len});
     debug.assert(tree.isCorrect());
     return tree;
 }
@@ -29,6 +31,7 @@ pub fn isolateFocused(self: @This()) ?[]const u8 {
         2000,
         "d\": t",
     ) orelse {
+        log.warn("\"focused\": true not found in tree", .{});
         return null;
     };
     const type_workspace = mem.lastIndexOfLinear(
@@ -36,6 +39,7 @@ pub fn isolateFocused(self: @This()) ?[]const u8 {
         self.json_str[0 .. focused_true - 400],
         "pe\": \"w",
     ) orelse {
+        log.warn("\"type\": \"workspace\" not found in tree", .{});
         return null;
     };
     const brace_first = mem.lastIndexOfScalar(
@@ -43,6 +47,7 @@ pub fn isolateFocused(self: @This()) ?[]const u8 {
         self.json_str[0 .. type_workspace - 10],
         '{',
     ) orelse {
+        log.warn("beginning brace not found in tree", .{});
         return null;
     };
     const representation = mem.indexOfPosLinear(
@@ -51,6 +56,7 @@ pub fn isolateFocused(self: @This()) ?[]const u8 {
         focused_true + 800,
         ", \"rep",
     ) orelse {
+        log.warn("\"representation\" not found in tree", .{});
         return null;
     };
     const brace_last = mem.indexOfScalarPos(
@@ -59,6 +65,7 @@ pub fn isolateFocused(self: @This()) ?[]const u8 {
         representation + 15,
         '}',
     ) orelse {
+        log.warn("ending brace not found in tree", .{});
         return null;
     };
     return self.json_str[brace_first .. brace_last + 1];
@@ -73,6 +80,7 @@ pub fn isolateAll(self: @This()) ?[]const u8 {
         800,
         "pe\": \"w",
     ) orelse {
+        log.warn("\"type\": \"workspace\" of scratchpad not found in tree", .{});
         return null;
     };
     type_workspace = mem.indexOfPosLinear(
@@ -81,6 +89,7 @@ pub fn isolateAll(self: @This()) ?[]const u8 {
         type_workspace + 1000,
         "pe\": \"w",
     ) orelse {
+        log.warn("\"type\": \"workspace\" of first workspace not found in tree", .{});
         return null;
     };
     const brace_first = mem.lastIndexOfScalar(
@@ -88,6 +97,7 @@ pub fn isolateAll(self: @This()) ?[]const u8 {
         self.json_str[0 .. type_workspace - 10],
         '{',
     ) orelse {
+        log.warn("beginning brace of first workspace not found in tree", .{});
         return null;
     };
     const representation = mem.lastIndexOfLinear(
@@ -95,6 +105,7 @@ pub fn isolateAll(self: @This()) ?[]const u8 {
         self.json_str[0 .. self.json_str.len - 500],
         ", \"rep",
     ) orelse {
+        log.warn("\"representation\" of last workspace not found in tree", .{});
         return null;
     };
     const brace_last = mem.indexOfScalarPos(
@@ -103,6 +114,7 @@ pub fn isolateAll(self: @This()) ?[]const u8 {
         representation + 15,
         '}',
     ) orelse {
+        log.warn("ending brace of last workspace not found in tree", .{});
         return null;
     };
     return self.json_str[brace_first - 2 .. brace_last + 3];
