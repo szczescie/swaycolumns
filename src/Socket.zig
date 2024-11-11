@@ -4,6 +4,7 @@ const std = @import("std");
 const debug = std.debug;
 const heap = std.heap;
 const json = std.json;
+const log = std.log;
 const net = std.net;
 const posix = std.posix;
 
@@ -19,11 +20,13 @@ pub const ErrorSwaysock =
 pub fn init(buf: []u8) ErrorSwaysock!@This() {
     debug.assert(buf.len >= 500);
     const sock_path = posix.getenv("SWAYSOCK") orelse {
+        log.err("SWAYSOCK not set", .{});
         return ErrorSwaysock.NoEnv;
     };
     const sock = net.connectUnixSocket(sock_path) catch |err| switch (err) {
         error.NameTooLong => unreachable,
         else => {
+            log.err("unable to connect to socket", .{});
             return err;
         },
     };
@@ -67,6 +70,7 @@ pub fn write(
     _ = self.sock.write(buf) catch |err| switch (err) {
         posix.WriteError.FileTooBig => unreachable,
         else => {
+            log.err("unable to write to socket", .{});
             return err;
         },
     };
@@ -79,6 +83,10 @@ pub fn readRaw(self: @This()) ErrorReadRaw![]const u8 {
     _ = try self.sock.read(self.buf[0..14]);
     const len: u32 = @bitCast(self.buf[6..10].*);
     if (len > self.buf.len) {
+        log.err(
+            "message of length {d} too big for buffer or length {d}",
+            .{ len, self.buf.len },
+        );
         return ErrorRead.MessageTooBig;
     }
     _ = try self.sock.read(self.buf[0..len]);
