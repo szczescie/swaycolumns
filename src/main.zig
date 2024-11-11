@@ -16,11 +16,9 @@ pub fn main() (Socket.ErrorSwaysock || Socket.ErrorWriteRead)!void {
     var buf: [512 * 1024]u8 = undefined;
     const columns = try Columns.init(&buf);
     defer columns.deinit();
-
     log.info("swaycolumns version {s} started; good morning 🌞", .{version});
     log.debug("number of cli arguments: {d}", .{os.argv.len - 1});
     log.debug("cli arguments: {s}", .{os.argv[1..]});
-
     if (os.argv.len == 3) {
         const subcommands = .{
             .{ "move", Columns.containerMove },
@@ -51,7 +49,6 @@ pub fn main() (Socket.ErrorSwaysock || Socket.ErrorWriteRead)!void {
             try columns.layoutStart();
         }
     }
-
     log.info("no actionable arguments; exiting", .{});
     posix.exit(1);
 }

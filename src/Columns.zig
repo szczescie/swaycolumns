@@ -42,11 +42,9 @@ pub const GetTarget = enum { focused, all };
 /// Parse the layout tree and return workspaces.
 pub fn workspaceGet(self: @This(), comptime target: GetTarget) Socket.ErrorWriteRead![]const Node {
     const tree = try Tree.init(self.command);
-
     const buf = self.command.buf[tree.json_str.len..];
     var fba = heap.FixedBufferAllocator.init(buf);
     const allocator = fba.allocator();
-
     const isolate = if (target == .all)
         Tree.isolateAll
     else
@@ -55,7 +53,6 @@ pub fn workspaceGet(self: @This(), comptime target: GetTarget) Socket.ErrorWrite
         return allocator.dupe(Node, &.{});
     };
     const options: json.ParseOptions = .{ .ignore_unknown_fields = true };
-
     if (target == .all) {
         return json.parseFromSliceLeaky(
             []const Node,
