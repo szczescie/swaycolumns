@@ -18,7 +18,7 @@ pub fn main() (Socket.ErrorSwaysock || Socket.ErrorWriteRead)!void {
     defer columns.deinit();
 
     log.info("swaycolumns version {s} started; good morning 🌞", .{version});
-    log.debug("# of cli arguments: {d}", .{os.argv.len - 1});
+    log.debug("number of cli arguments: {d}", .{os.argv.len - 1});
     log.debug("cli arguments: {s}", .{os.argv[1..]});
 
     if (os.argv.len == 3) {

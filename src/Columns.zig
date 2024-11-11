@@ -20,10 +20,7 @@ pub fn init(buf: []u8) Socket.ErrorSwaysock!@This() {
     errdefer subscribe.deinit();
     const command = try Socket.init(buf[0 .. buf.len / 8]);
     errdefer command.deinit();
-    return .{
-        .subscribe = subscribe,
-        .command = command,
-    };
+    return .{ .subscribe = subscribe, .command = command };
 }
 
 /// Disconnect from both sockets.
@@ -57,9 +54,7 @@ pub fn workspaceGet(self: @This(), comptime target: GetTarget) Socket.ErrorWrite
     const string = isolate(tree) orelse {
         return allocator.dupe(Node, &.{});
     };
-    const options: json.ParseOptions = .{
-        .ignore_unknown_fields = true,
-    };
+    const options: json.ParseOptions = .{ .ignore_unknown_fields = true };
 
     if (target == .all) {
         return json.parseFromSliceLeaky(
@@ -218,10 +213,7 @@ pub fn layoutStart(self: @This()) Socket.ErrorWriteRead!noreturn {
     debug.assert(subscribed.success);
     try self.layoutArrange(.{});
     while (true) {
-        const Event = struct {
-            change: []const u8,
-            current: ?struct {} = null,
-        };
+        const Event = struct { change: []const u8, current: ?struct {} = null };
         const event = try self.subscribe.read(Event);
         const tree_changed =
             (event.current != null and mem.eql(u8, event.change, "focus")) or

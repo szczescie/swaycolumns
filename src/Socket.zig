@@ -30,10 +30,7 @@ pub fn init(buf: []u8) ErrorSwaysock!@This() {
             return err;
         },
     };
-    return .{
-        .sock = sock,
-        .buf = buf,
-    };
+    return .{ .sock = sock, .buf = buf };
 }
 
 /// Disconnect from the socket.
@@ -103,9 +100,7 @@ pub fn read(self: @This(), comptime T: type) ErrorRead!T {
         T,
         fba.allocator(),
         string,
-        .{
-            .ignore_unknown_fields = true,
-        },
+        .{ .ignore_unknown_fields = true },
     );
 }
 
