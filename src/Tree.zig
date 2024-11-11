@@ -14,7 +14,7 @@ pub fn init(socket: Socket) Socket.ErrorWriteReadRaw!@This() {
 }
 
 /// Quickly ensure that the given string is a JSON-encoded Sway layout tree.
-pub fn isCorrect(self: @This()) bool {
+pub inline fn isCorrect(self: @This()) bool {
     return self.json_str.len >= 1000 and
         self.json_str[0] == '{' and
         self.json_str[self.json_str.len - 1] == '}';
