@@ -97,11 +97,12 @@ pub fn containerMove(self: @This(), comptime direction: MoveDirection) Socket.Er
                 window.focused and
                 (direction != .up or index_window != 0) and
                 (direction != .down or index_window != container.nodes.len - 1);
-            if (focused_middle) {
-                const string = "move " ++ @tagName(direction);
-                _ = try self.command.writeReadRaw(.command, string);
-                return;
+            if (!focused_middle) {
+                continue;
             }
+            const string = "move " ++ @tagName(direction);
+            _ = try self.command.writeReadRaw(.command, string);
+            return;
         }
     }
 }
@@ -113,10 +114,11 @@ pub fn containerFocus(self: @This(), comptime target: FocusTarget) Socket.ErrorW
     const tree = (try self.workspaceGet(.focused))[0];
     if (target != .column) {
         for (tree.nodes) |container| {
-            if (container.focused) {
-                _ = try self.command.writeReadRaw(.command, "focus child");
-                return;
+            if (!container.focused) {
+                continue;
             }
+            _ = try self.command.writeReadRaw(.command, "focus child");
+            return;
         }
     }
     if (target != .window) {
@@ -134,11 +136,12 @@ pub fn containerLayout(self: @This(), comptime mode: LayoutMode) Socket.ErrorWri
     else
         "layout " ++ @tagName(mode);
     for (tree.nodes) |container| {
-        if (container.focused) {
-            const string = "focus child;" ++ layout ++ "; focus parent";
-            _ = try self.command.writeReadRaw(.command, string);
-            return;
+        if (!container.focused) {
+            continue;
         }
+        const string = "focus child;" ++ layout ++ "; focus parent";
+        _ = try self.command.writeReadRaw(.command, string);
+        return;
     }
     _ = try self.command.writeReadRaw(.command, layout);
 }
@@ -152,16 +155,17 @@ pub fn layoutArrange(self: @This(), comptime options: ArrangeOptions) Socket.Err
     for (trees) |workspace| {
         if (workspace.nodes.len == 1) {
             const column = workspace.nodes[0];
-            if (column.nodes.len == 1) {
-                const window = column.nodes[0];
-                const commands = fmt.bufPrint(
-                    self.subscribe.buf[len..],
-                    "[con_id={d}] split n; ",
-                    .{window.id},
-                ) catch unreachable;
-                len += commands.len;
+            if (column.nodes.len != 1) {
                 continue;
             }
+            const window = column.nodes[0];
+            const commands = fmt.bufPrint(
+                self.subscribe.buf[len..],
+                "[con_id={d}] split n; ",
+                .{window.id},
+            ) catch unreachable;
+            len += commands.len;
+            continue;
         }
         for (workspace.nodes) |column| {
             if (workspace.nodes.len >= 2 and mem.eql(u8, column.layout, "none")) {
@@ -172,25 +176,27 @@ pub fn layoutArrange(self: @This(), comptime options: ArrangeOptions) Socket.Err
                 ) catch unreachable;
                 len += commands.len;
             }
-            if (options.fix_nested) {
-                for (column.nodes) |window| {
-                    if (!mem.eql(u8, window.layout, "none")) {
-                        const commands = fmt.bufPrint(
-                            self.subscribe.buf[len..],
-                            "mark swaycolumns_before; " ++
-                                "[con_id={0d}] mark swaycolumns_last; " ++
-                                "[con_id={1d}] move mark swaycolumns_last, move right; " ++
-                                "[con_id={0d}] unmark swaycolumns_last; " ++
-                                "[con_mark=swaycolumns_before] focus; " ++
-                                "unmark swaycolumns_before",
-                            .{
-                                workspace.nodes[workspace.nodes.len - 1].id,
-                                window.id,
-                            },
-                        ) catch unreachable;
-                        len += commands.len;
-                    }
+            if (!options.fix_nested) {
+                continue;
+            }
+            for (column.nodes) |window| {
+                if (mem.eql(u8, window.layout, "none")) {
+                    continue;
                 }
+                const commands = fmt.bufPrint(
+                    self.subscribe.buf[len..],
+                    "mark swaycolumns_before; " ++
+                        "[con_id={0d}] mark swaycolumns_last; " ++
+                        "[con_id={1d}] move mark swaycolumns_last, move right; " ++
+                        "[con_id={0d}] unmark swaycolumns_last; " ++
+                        "[con_mark=swaycolumns_before] focus; " ++
+                        "unmark swaycolumns_before",
+                    .{
+                        workspace.nodes[workspace.nodes.len - 1].id,
+                        window.id,
+                    },
+                ) catch unreachable;
+                len += commands.len;
             }
         }
     }
