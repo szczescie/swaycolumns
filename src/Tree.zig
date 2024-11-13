@@ -10,7 +10,7 @@ json_str: []const u8,
 pub fn init(socket: Socket) Socket.ErrorWriteReadRaw!@This() {
     var tree: @This() = undefined;
     tree.json_str = try socket.writeReadRaw(.tree, "");
-    log.debug("got tree of length: {d}\n", .{tree.json_str.len});
+    log.debug("got tree of length: {d}", .{tree.json_str.len});
     debug.assert(tree.isCorrect());
     return tree;
 }
