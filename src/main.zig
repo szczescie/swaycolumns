@@ -47,6 +47,8 @@ pub fn main() (Socket.ErrorSwaysock || Socket.ErrorWriteRead)!void {
     } else if (os.argv.len == 2) {
         if (mem.eql(u8, mem.span(os.argv[1]), "start")) {
             try columns.layoutStart();
+            log.info("sway closed; exiting", .{});
+            posix.exit(0);
         }
     }
     log.info("no actionable arguments; exiting", .{});

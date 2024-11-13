@@ -223,17 +223,17 @@ pub fn layoutArrange(self: @This(), comptime options: ArrangeOptions) Socket.Err
 }
 
 /// Subscribe to window events and run the main loop.
-pub fn layoutStart(self: @This()) Socket.ErrorWriteRead!noreturn {
+pub fn layoutStart(self: @This()) Socket.ErrorWriteRead!void {
     const Result = struct { success: bool };
     const subscribed = try self.subscribe.writeRead(
         Result,
         .subscribe,
-        "[\"window\"]",
+        "[\"window\", \"shutdown\"]",
     );
     debug.assert(subscribed.success);
     try self.layoutArrange(.{});
     while (true) {
-        const Event = struct { change: []const u8, current: ?struct {} = null };
+        const Event = struct { change: []const u8 };
         const event = try self.subscribe.read(Event);
         const change =
             mem.eql(u8, event.change, "focus") or
@@ -243,6 +243,8 @@ pub fn layoutStart(self: @This()) Socket.ErrorWriteRead!noreturn {
             mem.eql(u8, event.change, "floating");
         if (change) {
             try self.layoutArrange(.{});
+        } else if (mem.eql(u8, event.change, "exit")) {
+            return;
         }
     }
 }
