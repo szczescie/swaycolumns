@@ -23,7 +23,7 @@ pub fn main() (Socket.ErrorSwaysock || Socket.ErrorWriteRead)!void {
         const subcommands = .{
             .{ "move", Columns.containerMove },
             .{ "focus", Columns.containerFocus },
-            .{ "layout", Columns.containerFocus },
+            .{ "layout", Columns.containerLayout },
         };
         inline for (subcommands) |subcommand| {
             const argument, const method = subcommand;
