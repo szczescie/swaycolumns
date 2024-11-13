@@ -36,7 +36,6 @@ pub const Node = struct {
     focused: bool,
     nodes: []@This(),
 };
-
 pub const GetTarget = enum { focused, all };
 
 /// Parse the layout tree and return workspaces.
@@ -146,29 +145,46 @@ pub fn containerLayout(self: @This(), comptime mode: LayoutMode) Socket.ErrorWri
     _ = try self.command.writeReadRaw(.command, layout);
 }
 
+/// Option to eject nested containers.
 pub const ArrangeOptions = struct { fix_nested: bool = true };
 
-/// Split windows or flatten containers with an option to eject nested containers.
+/// Split windows or flatten containers.
 pub fn layoutArrange(self: @This(), comptime options: ArrangeOptions) Socket.ErrorWriteRead!void {
-    const trees = try self.workspaceGet(.all);
+    const workspaces = try self.workspaceGet(.all);
     var len: usize = 0;
-    for (trees) |workspace| {
-        if (workspace.nodes.len == 1) {
-            const column = workspace.nodes[0];
-            if (column.nodes.len != 1) {
-                continue;
-            }
-            const window = column.nodes[0];
+    for (workspaces) |workspace| {
+        const columns = workspace.nodes;
+        if (columns.len == 1 and columns[0].nodes.len == 1) {
+            const windows = columns[0].nodes;
             const commands = fmt.bufPrint(
                 self.subscribe.buf[len..],
                 "[con_id={d}] split n; ",
-                .{window.id},
+                .{windows[0].id},
             ) catch unreachable;
             len += commands.len;
             continue;
         }
-        for (workspace.nodes) |column| {
-            if (workspace.nodes.len >= 2 and mem.eql(u8, column.layout, "none")) {
+        if (columns.len >= 1 and mem.eql(u8, workspace.layout, "splitv")) {
+            {
+                const commands = fmt.bufPrint(
+                    self.subscribe.buf[len..],
+                    "[con_id={d}] move right, move left; ",
+                    .{columns[0].id},
+                ) catch unreachable;
+                len += commands.len;
+            }
+            for (0..columns[0].nodes.len) |_| {
+                const commands = fmt.bufPrint(
+                    self.subscribe.buf[len..],
+                    "[con_id={d}] move up; ",
+                    .{columns[0].id},
+                ) catch unreachable;
+                len += commands.len;
+            }
+            continue;
+        }
+        for (columns) |column| {
+            if (columns.len >= 2 and mem.eql(u8, column.layout, "none")) {
                 const commands = fmt.bufPrint(
                     self.subscribe.buf[len..],
                     "[con_id={d}] split v; ",
@@ -179,7 +195,8 @@ pub fn layoutArrange(self: @This(), comptime options: ArrangeOptions) Socket.Err
             if (!options.fix_nested) {
                 continue;
             }
-            for (column.nodes) |window| {
+            const windows = columns[0].nodes;
+            for (windows) |window| {
                 if (mem.eql(u8, window.layout, "none")) {
                     continue;
                 }
@@ -211,20 +228,20 @@ pub fn layoutStart(self: @This()) Socket.ErrorWriteRead!noreturn {
     const subscribed = try self.subscribe.writeRead(
         Result,
         .subscribe,
-        "[\"window\", \"workspace\"]",
+        "[\"window\"]",
     );
     debug.assert(subscribed.success);
     try self.layoutArrange(.{});
     while (true) {
         const Event = struct { change: []const u8, current: ?struct {} = null };
         const event = try self.subscribe.read(Event);
-        const tree_changed =
-            (event.current != null and mem.eql(u8, event.change, "focus")) or
+        const change =
+            mem.eql(u8, event.change, "focus") or
             mem.eql(u8, event.change, "new") or
             mem.eql(u8, event.change, "close") or
             mem.eql(u8, event.change, "move") or
             mem.eql(u8, event.change, "floating");
-        if (tree_changed) {
+        if (change) {
             try self.layoutArrange(.{});
         }
     }
