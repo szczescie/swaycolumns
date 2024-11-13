@@ -62,7 +62,6 @@ pub fn write(
         comptime quadlet(@intFromEnum(message_type));
     @memcpy(self.buf[0..head.len], head);
     @memcpy(self.buf[head.len .. head.len + string.len], string);
-
     const buf = self.buf[0 .. head.len + string.len];
     _ = self.sock.write(buf) catch |err| switch (err) {
         posix.WriteError.FileTooBig => unreachable,
