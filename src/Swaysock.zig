@@ -36,14 +36,14 @@ pub fn close(self: @This()) void {
 }
 
 /// Non-exhaustive list of Sway IPC message types.
-pub const MessageType = enum(u32) { command = 0, subscribe = 2, tree = 4 };
+pub const Message = enum(u32) { command = 0, subscribe = 2, tree = 4 };
 
 /// Cast as 4 bytes.
 inline fn quadlet(num: u32) [4]u8 {
     return @bitCast(num);
 }
 
-pub fn write(self: @This(), comptime message_type: MessageType, payload: []const u8) !void {
+pub fn write(self: @This(), comptime message_type: Message, payload: []const u8) !void {
     const header = "i3-ipc" ++ quadlet(@intCast(payload.len)) ++
         comptime quadlet(@intFromEnum(message_type));
     const message_len = 14 + payload.len;
@@ -78,6 +78,11 @@ pub fn read(self: @This()) ![]const u8 {
         return err;
     };
     return payload_buf;
+}
+
+pub fn writeRead(self: @This(), comptime message: Message, payload: []const u8) ![]const u8 {
+    try self.write(message, payload);
+    return self.read();
 }
 
 pub const json_options: ParseOptions = .{ .ignore_unknown_fields = true };

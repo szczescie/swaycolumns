@@ -53,8 +53,7 @@ pub fn containerMove(comptime direction: MoveDirection) !void {
                 log.warn("{}: failed to format con_id {}", .{ err, swap_id });
                 return err;
             };
-            try interact_sock.write(.command, payload);
-            _ = try interact_sock.read();
+            _ = try interact_sock.writeRead(.command, payload);
             return;
         }
         const windows = container.nodes;
@@ -64,8 +63,7 @@ pub fn containerMove(comptime direction: MoveDirection) !void {
                 (direction != .down or index_window != container.nodes.len - 1);
             if (!focused_middle) continue;
             const payload = "move " ++ @tagName(direction);
-            try interact_sock.write(.command, payload);
-            _ = try interact_sock.read();
+            _ = try interact_sock.writeRead(.command, payload);
             return;
         }
     }
@@ -80,14 +78,12 @@ pub fn containerFocus(comptime target: FocusTarget) !void {
         const containers = workspace.nodes;
         for (containers) |container| {
             if (!container.focused) continue;
-            try interact_sock.write(.command, "focus child");
-            _ = try interact_sock.read();
+            _ = try interact_sock.writeRead(.command, "focus child");
             return;
         }
     }
     if (target != .window) {
-        try interact_sock.write(.command, "focus parent");
-        _ = try interact_sock.read();
+        _ = try interact_sock.writeRead(.command, "focus parent");
     }
 }
 
@@ -104,12 +100,10 @@ pub fn containerLayout(comptime mode: LayoutMode) !void {
     for (containers) |container| {
         if (!container.focused) continue;
         const payload = "focus child; " ++ layout ++ "; focus parent";
-        try interact_sock.write(.command, payload);
-        _ = try interact_sock.read();
+        _ = try interact_sock.writeRead(.command, payload);
         return;
     }
-    try interact_sock.write(.command, layout);
-    _ = try interact_sock.read();
+    _ = try interact_sock.writeRead(.command, layout);
 }
 
 /// Option to eject nested containers.
@@ -195,8 +189,7 @@ pub fn layoutArrange(comptime options: ArrangeOptions) !void {
     }
     if (command.items.len > 0) {
         log.debug("running command: {s}", .{command.items});
-        try interact_sock.write(.command, command.items);
-        _ = try interact_sock.read();
+        _ = try interact_sock.writeRead(.command, command.items);
     }
 }
 
@@ -214,8 +207,7 @@ fn layoutApply() !bool {
 
 /// Subscribe to window events and run the main loop.
 pub fn layoutStart() !void {
-    try observe_sock.write(.subscribe, "[\"window\", \"shutdown\"]");
-    _ = try observe_sock.read();
+    _ = try observe_sock.writeRead(.subscribe, "[\"window\", \"shutdown\"]");
     try layoutArrange(.{});
     const retry_time = 5 * ns_per_s;
     while (true) {

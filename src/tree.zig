@@ -20,8 +20,7 @@ inline fn isCorrect(tree_str: []const u8) bool {
 }
 
 fn get() ![]const u8 {
-    try interact.write(.tree, "");
-    const tree_str = try interact.read();
+    const tree_str = try interact.writeRead(.tree, "");
     log.debug("got tree of length: {d}", .{tree_str.len});
     assert(isCorrect(tree_str));
     return tree_str;
