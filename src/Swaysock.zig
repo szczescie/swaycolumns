@@ -16,8 +16,10 @@ const endian = builtin.target.cpu.arch.endian();
 const main = @import("main.zig");
 const fba = &main.fba;
 
+/// The Sway socket.
 sock: Stream,
 
+/// Establish a connection with the Sway socket.
 pub fn connect() !@This() {
     const sock_path = getenv("SWAYSOCK") orelse {
         const err = error.NoEnv;
@@ -30,6 +32,7 @@ pub fn connect() !@This() {
     } };
 }
 
+/// Close the socket.
 pub fn close(self: @This()) void {
     self.sock.close();
 }
@@ -42,6 +45,7 @@ inline fn quadlet(num: u32) [4]u8 {
     return @bitCast(num);
 }
 
+/// Send a message to the Sway socket.
 pub fn write(self: @This(), comptime message_type: Message, payload: []const u8) !void {
     const header = "i3-ipc" ++ quadlet(@intCast(payload.len)) ++
         comptime quadlet(@intFromEnum(message_type));
@@ -58,6 +62,7 @@ pub fn write(self: @This(), comptime message_type: Message, payload: []const u8)
     };
 }
 
+/// Read a message from the Sway socket.
 pub fn read(self: @This()) ![]const u8 {
     const header_buf = fba.alloc(u8, 14) catch |err| {
         log.warn("{}: failed to allocate array of length 14", .{err});
@@ -79,13 +84,16 @@ pub fn read(self: @This()) ![]const u8 {
     return payload_buf;
 }
 
+/// Send a message the Sway socket and read the reply.
 pub fn writeRead(self: @This(), comptime message: Message, payload: []const u8) ![]const u8 {
     try self.write(message, payload);
     return self.read();
 }
 
+/// Options used by parse functions in Swaysock.zig and tree.zig.
 pub const json_options: ParseOptions = .{ .ignore_unknown_fields = true };
 
+/// Read and parse a message from the Sway socket.
 pub fn readParse(self: @This(), comptime T: type) !T {
     const string = try self.read();
     const result = parseFromSliceLeaky(T, fba.*, string, json_options) catch |err| {

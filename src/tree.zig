@@ -1,3 +1,5 @@
+//! Tree parsing logic.
+
 const std = @import("std");
 const assert = std.debug.assert;
 const indexOfPosLinear = std.mem.indexOfPosLinear;
@@ -19,6 +21,7 @@ inline fn isCorrect(tree_str: []const u8) bool {
     return tree_str.len >= 1000 and tree_str[0] == '{' and tree_str[tree_str.len - 1] == '}';
 }
 
+/// Get the layout tree in JSON form.
 fn get() ![]const u8 {
     const tree_str = try interact.writeRead(.tree, "");
     log.debug("got tree of length: {d}", .{tree_str.len});
@@ -80,14 +83,17 @@ fn isolateFocused(tree_str: []const u8) ![]const u8 {
     return tree_str[start .. end + 1];
 }
 
+/// All workspaces or only the focused workspace.
 pub const GetTarget = enum { all, focused };
 /// Sway layout tree node.
 pub const Node = struct { id: u32, layout: []const u8, focused: bool, nodes: []@This() };
 
+/// Return the correct result type for the target.
 inline fn ParseResult(comptime target: GetTarget) type {
     return if (target == .all) []Node else Node;
 }
 
+/// Read and then parse the Sway layout tree and return the result.
 pub fn getParsed(comptime target: GetTarget) !ParseResult(target) {
     const T = ParseResult(target);
     const workspace_str = try (if (target == .all) isolateAll else isolateFocused)(try get());

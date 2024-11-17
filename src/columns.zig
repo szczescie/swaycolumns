@@ -16,7 +16,9 @@ const Swaysock = @import("Swaysock.zig");
 const tree = @import("tree.zig");
 const getParsed = tree.getParsed;
 
+/// Socket used for subscribing.
 pub var observe_sock: Swaysock = undefined;
+/// Socket used for commands and getting the tree.
 pub var interact_sock: Swaysock = undefined;
 
 /// Connect to both sockets.
@@ -33,6 +35,7 @@ pub fn close() void {
     interact_sock.close();
 }
 
+/// Argument passed to the move command.
 pub const MoveDirection = enum { left, right, up, down };
 
 /// Move window or swap containers.
@@ -67,6 +70,7 @@ pub fn containerMove(comptime direction: MoveDirection) !void {
     }
 }
 
+/// Argument to the focus command.
 pub const FocusTarget = enum { column, window, toggle };
 
 /// Focus column or window.
@@ -82,6 +86,7 @@ pub fn containerFocus(comptime target: FocusTarget) !void {
     _ = try interact_sock.writeRead(.command, "focus parent");
 }
 
+/// Argument to the layout command.
 pub const LayoutMode = enum { splitv, stacking, toggle };
 
 /// Switch the column's layout.
@@ -178,6 +183,7 @@ pub fn layoutArrange(comptime options: ArrangeOptions) !void {
     }
 }
 
+/// Reset memory and change the layout tree.
 fn layoutApply() !bool {
     defer fba_state.reset();
     const event = try observe_sock.readParse(struct { change: []const u8 });
