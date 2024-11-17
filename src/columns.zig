@@ -169,12 +169,9 @@ pub fn layoutArrange(comptime options: ArrangeOptions) !void {
             const windows = column.nodes;
             for (windows) |window| {
                 if (eql(u8, window.layout, "none")) continue;
-                const format = "mark swaycolumns_before; " ++
-                    "[con_id={0d}] mark swaycolumns_last; " ++
+                const format = "[con_id={0d}] mark swaycolumns_last; " ++
                     "[con_id={1d}] move mark swaycolumns_last, move right; " ++
-                    "[con_id={0d}] unmark swaycolumns_last; " ++
-                    "[con_mark=swaycolumns_before] focus; " ++
-                    "unmark swaycolumns_before; ";
+                    "[con_id={0d}] unmark swaycolumns_last; ";
                 const args = .{ workspace.nodes[workspace.nodes.len - 1].id, window.id };
                 const subcommand = allocPrint(fba.*, format, args) catch |err| {
                     log.warn("{}: failed to format con_id {}, {}", .{err} ++ args);
