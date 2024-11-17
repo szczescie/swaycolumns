@@ -183,7 +183,7 @@ pub fn layoutArrange(comptime options: ArrangeOptions) !void {
     }
 }
 
-/// Reset memory and change the layout tree.
+/// Change the layout tree and reset memory.
 fn layoutApply() !bool {
     defer fba_state.reset();
     const event = try observe_sock.readParse(struct { change: []const u8 });
@@ -201,7 +201,8 @@ pub fn layoutStart() !void {
     try layoutArrange(.{});
     while (true) {
         const exited = layoutApply() catch |err| {
-            const retry_time = 5 * ns_per_s;
+            if (err != error.OutOfMemory) return err;
+            const retry_time = 10 * ns_per_s;
             const format = "{}: failed to apply layout; trying again in {d} seconds";
             log.err(format, .{ err, retry_time });
             sleep(retry_time);
