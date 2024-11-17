@@ -4,11 +4,10 @@ const std = @import("std");
 const os = std.os;
 const eql = std.mem.eql;
 const exit = std.posix.exit;
+const fatal = std.zig.fatal;
 const FixedBufferAllocator = std.heap.FixedBufferAllocator;
 const log = std.log;
 const span = std.mem.span;
-const builtin = @import("builtin");
-const mode = builtin.mode;
 
 const columns = @import("columns.zig");
 
@@ -35,23 +34,10 @@ pub fn main() !void {
             const argument, const func = subcommand;
             if (eql(u8, span(argv[1]), argument)) {
                 const Parameter = @typeInfo(@TypeOf(func)).Fn.params[0].type.?;
-                const fields = @typeInfo(Parameter).Enum.fields;
-                inline for (fields) |field| {
+                inline for (@typeInfo(Parameter).Enum.fields) |field| {
                     if (eql(u8, span(argv[2]), field.name)) {
-                        return @call(
-                            .auto,
-                            func,
-                            .{@field(Parameter, field.name)},
-                        ) catch |err| {
-                            log.err(
-                                "{}: unable to start swaycolumns; exiting",
-                                .{err},
-                            );
-                            if (mode == .Debug) {
-                                return err;
-                            } else {
-                                exit(1);
-                            }
+                        return @call(.auto, func, .{@field(Parameter, field.name)}) catch |err| {
+                            fatal("{}: unable to start swaycolumns; exiting", .{err});
                         };
                     }
                 }
@@ -60,20 +46,10 @@ pub fn main() !void {
     } else if (argv.len == 2) {
         if (eql(u8, span(argv[1]), "start")) {
             columns.layoutStart() catch |err| {
-                log.err(
-                    "{}: unable to start swaycolumns; exiting",
-                    .{err},
-                );
-                if (mode == .Debug) {
-                    return err;
-                } else {
-                    exit(1);
-                }
+                fatal("{}: unable to start swaycolumns; exiting", .{err});
             };
-            log.info("sway closed; exiting", .{});
-            exit(0);
+            fatal("sway closed; exiting", .{});
         }
     }
-    log.info("no actionable arguments; exiting", .{});
-    exit(1);
+    fatal("no actionable arguments; exiting", .{});
 }
