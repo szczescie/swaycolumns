@@ -59,7 +59,17 @@ pub fn main() !void {
         }
     } else if (argv.len == 2) {
         if (eql(u8, span(argv[1]), "start")) {
-            try columns.layoutStart();
+            columns.layoutStart() catch |err| {
+                log.err(
+                    "{}: unable to start swaycolumns; exiting",
+                    .{err},
+                );
+                if (mode == .Debug) {
+                    return err;
+                } else {
+                    exit(1);
+                }
+            };
             log.info("sway closed; exiting", .{});
             exit(0);
         }
