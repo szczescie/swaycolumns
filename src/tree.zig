@@ -30,27 +30,27 @@ fn get() ![]const u8 {
 fn isolateAll(tree_str: []const u8) ![]const u8 {
     var @"type" = indexOfPosLinear(u8, tree_str, 800, "pe\": \"w") orelse {
         log.warn("\"type\": \"workspace\" of scratchpad not found in tree", .{});
-        return error.notFound;
+        return error.NotFound;
     };
     @"type" = indexOfPosLinear(u8, tree_str, @"type" + 1000, "pe\": \"w") orelse {
         const format = "\"type\": \"workspace\" of first workspace not found; last index was {}";
         log.warn(format, .{@"type"});
-        return error.notFound;
+        return error.NotFound;
     };
     const start = lastIndexOfScalar(u8, tree_str[0 .. @"type" - 10], '{') orelse {
         const format = "beginning brace of first workspace not found; last index was {}";
         log.warn(format, .{@"type"});
-        return error.notFound;
+        return error.NotFound;
     };
     const repr = lastIndexOfLinear(u8, tree_str[0 .. tree_str.len - 500], ", \"rep") orelse {
         const format = "\"representation\" of last workspace not found; last index was {}";
         log.warn(format, .{start});
-        return error.notFound;
+        return error.NotFound;
     };
     const end = indexOfScalarPos(u8, tree_str, repr + 15, '}') orelse {
         const format = "ending brace of last workspace not found; last index was {}";
         log.warn(format, .{repr});
-        return error.notFound;
+        return error.NotFound;
     };
     return tree_str[start - 2 .. end + 3];
 }
@@ -59,23 +59,23 @@ fn isolateAll(tree_str: []const u8) ![]const u8 {
 fn isolateFocused(tree_str: []const u8) ![]const u8 {
     const focused = indexOfPosLinear(u8, tree_str, 2000, "d\": t") orelse {
         log.warn("\"focused\": true not found", .{});
-        return error.notFound;
+        return error.NotFound;
     };
     const @"type" = lastIndexOfLinear(u8, tree_str[0 .. focused - 400], "pe\": \"w") orelse {
         log.warn("\"type\": \"workspace\" not found; last index was {}", .{focused});
-        return error.notFound;
+        return error.NotFound;
     };
     const start = lastIndexOfScalar(u8, tree_str[0 .. @"type" - 10], '{') orelse {
         log.warn("beginning brace not found; last index was {}", .{@"type"});
-        return error.notFound;
+        return error.NotFound;
     };
     const repr = indexOfPosLinear(u8, tree_str, focused + 800, ", \"rep") orelse {
         log.warn("\"representation\" not found; last index was {}", .{start});
-        return error.notFound;
+        return error.NotFound;
     };
     const end = indexOfScalarPos(u8, tree_str, repr + 15, '}') orelse {
         log.warn("ending brace not found; last index was {}", .{repr});
-        return error.notFound;
+        return error.NotFound;
     };
     return tree_str[start .. end + 1];
 }

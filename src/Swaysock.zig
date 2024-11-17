@@ -24,11 +24,10 @@ pub fn connect() !@This() {
         log.warn("{}: failed to connect to socket; SWAYSOCK is not set", .{err});
         return err;
     };
-    const sock = connectUnixSocket(sock_path) catch |err| {
+    return .{ .sock = connectUnixSocket(sock_path) catch |err| {
         log.warn("{}: failed to connect to socket at path {s}", .{ err, sock_path });
         return err;
-    };
-    return .{ .sock = sock };
+    } };
 }
 
 pub fn close(self: @This()) void {

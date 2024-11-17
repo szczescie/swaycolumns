@@ -3,7 +3,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const allocPrint = std.fmt.allocPrint;
-const AllocPrintError = std.fmt.AllocPrintError;
 const ArrayList = std.ArrayList;
 const eql = std.mem.eql;
 const log = std.log;
@@ -38,8 +37,7 @@ pub const MoveDirection = enum { left, right, up, down };
 
 /// Move window or swap containers.
 pub fn containerMove(comptime direction: MoveDirection) !void {
-    const workspace = try getParsed(.focused);
-    const containers = workspace.nodes;
+    const containers = (try getParsed(.focused)).nodes;
     for (containers, 0..) |container, index_container| {
         if (container.focused) {
             const swap_id = if (direction == .left and index_container > 0)
@@ -60,7 +58,7 @@ pub fn containerMove(comptime direction: MoveDirection) !void {
         for (windows, 0..) |window, index_window| {
             const focused_middle = window.focused and
                 (direction != .up or index_window != 0) and
-                (direction != .down or index_window != container.nodes.len - 1);
+                (direction != .down or index_window != windows.len - 1);
             if (!focused_middle) continue;
             const payload = "move " ++ @tagName(direction);
             _ = try interact_sock.writeRead(.command, payload);
@@ -74,33 +72,25 @@ pub const FocusTarget = enum { column, window, toggle };
 /// Focus column or window.
 pub fn containerFocus(comptime target: FocusTarget) !void {
     if (target != .column) {
-        const workspace = try getParsed(.focused);
-        const containers = workspace.nodes;
-        for (containers) |container| {
+        for ((try getParsed(.focused)).nodes) |container| {
             if (!container.focused) continue;
             _ = try interact_sock.writeRead(.command, "focus child");
             return;
         }
     }
-    if (target != .window) {
-        _ = try interact_sock.writeRead(.command, "focus parent");
-    }
+    if (target == .window) return;
+    _ = try interact_sock.writeRead(.command, "focus parent");
 }
 
 pub const LayoutMode = enum { splitv, stacking, toggle };
 
 /// Switch the column's layout.
 pub fn containerLayout(comptime mode: LayoutMode) !void {
-    const workspace = try getParsed(.focused);
-    const containers = workspace.nodes;
-    const layout = if (mode == .toggle)
-        "layout toggle splitv stacking"
-    else
-        "layout " ++ @tagName(mode);
-    for (containers) |container| {
+    const toggle = "layout toggle splitv stacking";
+    const layout = if (mode == .toggle) toggle else "layout " ++ @tagName(mode);
+    for ((try getParsed(.focused)).nodes) |container| {
         if (!container.focused) continue;
-        const payload = "focus child; " ++ layout ++ "; focus parent";
-        _ = try interact_sock.writeRead(.command, payload);
+        _ = try interact_sock.writeRead(.command, "focus child; " ++ layout ++ "; focus parent");
         return;
     }
     _ = try interact_sock.writeRead(.command, layout);
@@ -111,9 +101,8 @@ pub const ArrangeOptions = struct { fix_nested: bool = true };
 
 /// Split windows or flatten containers.
 pub fn layoutArrange(comptime options: ArrangeOptions) !void {
-    const workspaces = try getParsed(.all);
     var command = ArrayList(u8).init(fba.*);
-    for (workspaces) |workspace| {
+    for (try getParsed(.all)) |workspace| {
         const columns = workspace.nodes;
         if (columns.len == 1 and columns[0].nodes.len == 1) {
             const windows = columns[0].nodes;
@@ -166,8 +155,7 @@ pub fn layoutArrange(comptime options: ArrangeOptions) !void {
                 };
             }
             if (!options.fix_nested) continue;
-            const windows = column.nodes;
-            for (windows) |window| {
+            for (column.nodes) |window| {
                 if (eql(u8, window.layout, "none")) continue;
                 const format = "[con_id={0d}] mark swaycolumns_last; " ++
                     "[con_id={1d}] move mark swaycolumns_last, move right; " ++
@@ -192,8 +180,7 @@ pub fn layoutArrange(comptime options: ArrangeOptions) !void {
 
 fn layoutApply() !bool {
     defer fba_state.reset();
-    const Event = struct { change: []const u8 };
-    const event = try observe_sock.readParse(Event);
+    const event = try observe_sock.readParse(struct { change: []const u8 });
     if (eql(u8, event.change, "exit")) return true;
     const tree_changed = eql(u8, event.change, "focus") or
         eql(u8, event.change, "new") or eql(u8, event.change, "close") or
@@ -206,17 +193,16 @@ fn layoutApply() !bool {
 pub fn layoutStart() !void {
     _ = try observe_sock.writeRead(.subscribe, "[\"window\", \"shutdown\"]");
     try layoutArrange(.{});
-    const retry_time = 5 * ns_per_s;
     while (true) {
         const exited = layoutApply() catch |err| {
+            const retry_time = 5 * ns_per_s;
             const format = "{}: failed to apply layout; trying again in {d} seconds";
             log.err(format, .{ err, retry_time });
             sleep(retry_time);
             continue;
         };
-        if (exited) {
-            log.info("exiting swaycolumns; goodbye", .{});
-            return;
-        }
+        if (!exited) continue;
+        log.info("exiting swaycolumns; goodbye", .{});
+        return;
     }
 }
