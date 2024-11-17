@@ -67,8 +67,3 @@ pub fn main() !void {
     log.info("no actionable arguments; exiting", .{});
     exit(1);
 }
-
-// TODO: logs
-// TODO: buffered reader
-// TODO: oom restart
-// TODO: damage tracking

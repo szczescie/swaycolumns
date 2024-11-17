@@ -1,7 +1,7 @@
 ## Installation
 
 ```console
-zig build -Doptimize=ReleaseSafe --prefix ~/.local
+zig build -Doptimize=ReleaseFast --prefix ~/.local
 ```
 
 ## Dog
