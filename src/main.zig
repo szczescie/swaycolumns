@@ -1,58 +1,71 @@
 //! Manual tiling without boilerplate key presses.
 
 const std = @import("std");
-const log = std.log;
-const mem = std.mem;
 const os = std.os;
-const posix = std.posix;
+const eql = std.mem.eql;
+const exit = std.posix.exit;
+const FixedBufferAllocator = std.heap.FixedBufferAllocator;
+const log = std.log;
+const span = std.mem.span;
+const builtin = @import("builtin");
+const mode = builtin.mode;
 
-const Socket = @import("Socket.zig");
-const Columns = @import("Columns.zig");
+const columns = @import("columns.zig");
 
-const version = "0.1";
+pub const version = "0.2";
+var fba_buf: [1024 * 1024]u8 = undefined;
+pub var fba_state = FixedBufferAllocator.init(&fba_buf);
+pub const fba = fba_state.allocator();
 
 /// Run the program.
-pub fn main() (Socket.ErrorSwaysock || Socket.ErrorWriteRead)!void {
-    var buf: [512 * 1024]u8 = undefined;
-    const columns = try Columns.init(&buf);
-    defer columns.deinit();
+pub fn main() !void {
+    try columns.connect();
+    defer columns.close();
+    const argv = os.argv;
     log.info("swaycolumns version {s} started; good morning 🌞", .{version});
-    log.debug("number of cli arguments: {d}", .{os.argv.len - 1});
-    log.debug("cli arguments: {s}", .{os.argv[1..]});
-    if (os.argv.len == 3) {
+    log.debug("number of cli arguments: {d}", .{argv.len - 1});
+    log.debug("cli arguments: {s}", .{argv[1..]});
+    if (argv.len == 3) {
         const subcommands = .{
-            .{ "move", Columns.containerMove },
-            .{ "focus", Columns.containerFocus },
-            .{ "layout", Columns.containerLayout },
+            .{ "move", columns.containerMove },
+            .{ "focus", columns.containerFocus },
+            .{ "layout", columns.containerLayout },
         };
         inline for (subcommands) |subcommand| {
-            const argument, const method = subcommand;
-            if (mem.eql(u8, mem.span(os.argv[1]), argument)) {
-                const Parameter = @typeInfo(@TypeOf(method)).Fn.params[1].type.?;
+            const argument, const func = subcommand;
+            if (eql(u8, span(argv[1]), argument)) {
+                const Parameter = @typeInfo(@TypeOf(func)).Fn.params[0].type.?;
                 const fields = @typeInfo(Parameter).Enum.fields;
                 inline for (fields) |field| {
-                    if (mem.eql(u8, mem.span(os.argv[2]), field.name)) {
+                    if (eql(u8, span(argv[2]), field.name)) {
                         return @call(
                             .auto,
-                            method,
-                            .{
-                                columns,
-                                @field(Parameter, field.name),
-                            },
-                        );
+                            func,
+                            .{@field(Parameter, field.name)},
+                        ) catch |err| {
+                            log.err(
+                                "{}: unable to start swaycolumns; exiting",
+                                .{err},
+                            );
+                            if (mode == .Debug) {
+                                return err;
+                            } else {
+                                exit(1);
+                            }
+                        };
                     }
                 }
             }
         }
-    } else if (os.argv.len == 2) {
-        if (mem.eql(u8, mem.span(os.argv[1]), "start")) {
+    } else if (argv.len == 2) {
+        if (eql(u8, span(argv[1]), "start")) {
             try columns.layoutStart();
             log.info("sway closed; exiting", .{});
-            posix.exit(0);
+            exit(0);
         }
     }
     log.info("no actionable arguments; exiting", .{});
-    posix.exit(1);
+    exit(1);
 }
 
 // TODO: logs
