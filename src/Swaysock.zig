@@ -50,13 +50,13 @@ pub fn write(self: @This(), comptime message_type: Message, payload: []const u8)
     const header = "i3-ipc" ++ quadlet(@intCast(payload.len)) ++
         comptime quadlet(@intFromEnum(message_type));
     const message_len = 14 + payload.len;
-    const message_buf = fba.alloc(u8, message_len) catch |err| {
+    const message = fba.alloc(u8, message_len) catch |err| {
         log.warn("{}: failed to allocate array of lenght {}", .{ err, message_len });
         return err;
     };
-    @memcpy(message_buf[0..14], header);
-    @memcpy(message_buf[14..message_len], payload);
-    _ = self.sock.writeAll(message_buf) catch |err| {
+    @memcpy(message[0..14], header);
+    @memcpy(message[14..message_len], payload);
+    _ = self.sock.writeAll(message) catch |err| {
         log.warn("{}: failed to write message {d}, \"{s}\"", .{ err, header[6..], payload });
         return err;
     };
@@ -64,24 +64,29 @@ pub fn write(self: @This(), comptime message_type: Message, payload: []const u8)
 
 /// Read a message from the Sway socket.
 pub fn read(self: @This()) ![]const u8 {
-    const header_buf = fba.alloc(u8, 14) catch |err| {
+    log.debug("allocating 14 bytes of memory for message header", .{});
+    const header = fba.alloc(u8, 14) catch |err| {
         log.warn("{}: failed to allocate array of length 14", .{err});
         return err;
     };
-    _ = self.sock.readAll(header_buf) catch |err| {
+    _ = self.sock.readAll(header) catch |err| {
         log.warn("{}: failed to read header of length 14", .{err});
         return err;
     };
-    const payload_len = readInt(u32, header_buf[6..10], endian);
-    const payload_buf = fba.alloc(u8, payload_len) catch |err| {
+    const format = "got message header \"{s}\", {d}, {d}";
+    log.debug(format, .{ header[0..6], header[6..10], header[10..14] });
+    const payload_len = readInt(u32, header[6..10], endian);
+    log.debug("allocating {d} bytes of memory for message payload", .{payload_len});
+    const payload = fba.alloc(u8, payload_len) catch |err| {
         log.warn("{}: failed to allocate array of length {}", .{ err, payload_len });
         return err;
     };
-    _ = self.sock.readAll(payload_buf) catch |err| {
+    _ = self.sock.readAll(payload) catch |err| {
         log.warn("{}: failed to read payload of length {}", .{ err, payload_len });
         return err;
     };
-    return payload_buf;
+    log.debug("got message payload \"{s}\"", .{payload});
+    return payload;
 }
 
 /// Send a message the Sway socket and read the reply.
