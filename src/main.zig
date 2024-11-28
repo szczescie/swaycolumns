@@ -37,7 +37,7 @@ pub fn main() !void {
                 inline for (@typeInfo(Parameter).Enum.fields) |field| {
                     if (eql(u8, span(argv[2]), field.name)) {
                         return @call(.auto, func, .{@field(Parameter, field.name)}) catch |err| {
-                            fatal("{}: unable to start swaycolumns; exiting", .{err});
+                            fatal("{}: a fatal error has occurred; exiting", .{err});
                         };
                     }
                 }

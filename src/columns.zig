@@ -185,7 +185,10 @@ pub fn layoutArrange(comptime options: ArrangeOptions) !void {
 
 /// Change the layout tree and reset memory.
 fn layoutApply() !bool {
-    defer fba_state.reset();
+    defer {
+        log.debug("resetting fixed buffer allocator", .{});
+        fba_state.reset();
+    }
     const event = try observe_sock.readParse(struct { change: []const u8 });
     if (eql(u8, event.change, "exit")) return true;
     const tree_changed = eql(u8, event.change, "focus") or
@@ -201,11 +204,12 @@ pub fn layoutStart() !void {
     try layoutArrange(.{});
     while (true) {
         const exited = layoutApply() catch |err| {
-            if (err != error.OutOfMemory) return err;
-            const retry_time = 10 * ns_per_s;
+            if (err != error.OutOfMemory and err != error.SyntaxError and
+                err != error.UnexpectedEndOfInput and err != error.NotFound) return err;
+            const retry_time_sec = 5;
             const format = "{}: failed to apply layout; trying again in {d} seconds";
-            log.err(format, .{ err, retry_time });
-            sleep(retry_time);
+            log.err(format, .{ err, retry_time_sec });
+            sleep(retry_time_sec * ns_per_s);
             continue;
         };
         if (!exited) continue;
