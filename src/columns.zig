@@ -113,14 +113,12 @@ pub fn layoutArrange() !void {
                 try command.print(main.fba,
                     \\[con_id={d}] split v; 
                 , .{column.id});
-            for (column.nodes) |window| {
-                if (std.mem.eql(u8, window.layout, "none")) continue;
-                try command.print(main.fba,
-                    \\[con_id={0d}] mark swaycolumns_last; 
-                    \\[con_id={1d}] move mark swaycolumns_last, move right; 
-                    \\[con_id={0d}] unmark swaycolumns_last; 
-                , .{ workspace.nodes[workspace.nodes.len - 1].id, window.id });
-            }
+            for (column.nodes) |window|
+                if (!std.mem.eql(u8, window.layout, "none"))
+                    for (0..columns.len) |_|
+                        try command.print(main.fba,
+                            \\[con_id={d}] move right; 
+                        , .{window.id});
         }
     }
     if (command.items.len > 0)
