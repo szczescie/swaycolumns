@@ -1,7 +1,8 @@
 .{
-    .name = "swaycolumns",
+    .name = .swaycolumns,
     .version = "0.0.0",
     .dependencies = .{},
+    .fingerprint = 0xd1771b6ab98e149e,
     .paths = .{
         "build.zig",
         "build.zig.zon",
