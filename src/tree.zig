@@ -30,7 +30,7 @@ pub const Node = struct {
     floating_nodes: []@This(),
 };
 
-pub fn parse(T: type, string: []const u8) T {
+pub fn parse(T: type, string: []const u8) !T {
     return std.json.parseFromSliceLeaky(T, main.fba, string, .{
         .ignore_unknown_fields = true,
     });
