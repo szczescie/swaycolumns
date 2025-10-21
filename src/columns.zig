@@ -125,6 +125,8 @@ pub fn drop() !void {
     try socket.discard(&run_reader);
 }
 
+var dragging_bindsym = false;
+
 fn dragging(event: []const u8) !void {
     const Container = struct { container: tree.Node };
     const parsed = std.json.parseFromSliceLeaky(Container, main.fba, event, .{
@@ -134,22 +136,30 @@ fn dragging(event: []const u8) !void {
         else => return err,
     };
     if (std.mem.eql(u8, parsed.container.type, "floating_con")) {
-        try socket.write(&run_writer, .command,
-            \\unbindsym --whole-window super+button1;
-            \\unbindsym --whole-window --release super+button1
-        );
-        return socket.discard(&run_reader);
+        if (dragging_bindsym) {
+            try socket.write(&run_writer, .command,
+                \\unbindsym --whole-window super+button1;
+                \\unbindsym --whole-window --release super+button1
+            );
+            try socket.discard(&run_reader);
+            dragging_bindsym = false;
+            return;
+        }
+        return;
     }
-    // zig fmt: off
-    try socket.write(&run_writer, .command,
-        \\bindsym --whole-window super+button1 mark --add swaycolumns_drag;
-        \\bindsym --whole-window --release super+button1 "
-        ++ \\    mark --add swaycolumns_drop;
-        ++ \\    exec swaycolumns drop
-        ++ \\"
-    );
-    // zig fmt: on
-    return socket.discard(&run_reader);
+    if (!dragging_bindsym) {
+        // zig fmt: off
+        try socket.write(&run_writer, .command,
+            \\bindsym --whole-window super+button1 mark --add swaycolumns_drag;
+            \\bindsym --whole-window --release super+button1 "
+            ++ \\    mark --add swaycolumns_drop;
+            ++ \\    exec swaycolumns drop
+            ++ \\"
+        );
+        // zig fmt: on
+        try socket.discard(&run_reader);
+        dragging_bindsym = true;
+    }
 }
 
 /// Split windows or flatten containers.
