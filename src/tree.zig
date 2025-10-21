@@ -34,36 +34,6 @@ fn get() ![]const u8 {
     return tree_str;
 }
 
-/// Extract all workspaces other than the scratchpad.
-fn isolateAll(tree_str: []const u8) ![]const u8 {
-    var @"type" = std.mem.indexOfPosLinear(u8, tree_str, 800, "pe\": \"w") orelse
-        return error.NotFound;
-    @"type" = std.mem.indexOfPosLinear(u8, tree_str, @"type" + 1000, "pe\": \"w") orelse
-        return error.NotFound;
-    const start = std.mem.lastIndexOfScalar(u8, tree_str[0 .. @"type" - 10], '{') orelse
-        return error.NotFound;
-    const repr = std.mem.lastIndexOfLinear(u8, tree_str[0 .. tree_str.len - 500], ", \"rep") orelse
-        return error.NotFound;
-    const end = std.mem.indexOfScalarPos(u8, tree_str, repr + 15, '}') orelse
-        return error.NotFound;
-    return tree_str[start - 2 .. end + 3];
-}
-
-/// Extract the focused workspace.
-fn isolateFocused(tree_str: []const u8) ![]const u8 {
-    const focused = std.mem.indexOfPosLinear(u8, tree_str, 2000, "d\": t") orelse
-        return error.NotFound;
-    const @"type" = std.mem.lastIndexOfLinear(u8, tree_str[0 .. focused - 400], "pe\": \"w") orelse
-        return error.NotFound;
-    const start = std.mem.lastIndexOfScalar(u8, tree_str[0 .. @"type" - 10], '{') orelse
-        return error.NotFound;
-    const repr = std.mem.indexOfPosLinear(u8, tree_str, focused + 800, ", \"rep") orelse
-        return error.NotFound;
-    const end = std.mem.indexOfScalarPos(u8, tree_str, repr + 15, '}') orelse
-        return error.NotFound;
-    return tree_str[start .. end + 1];
-}
-
 /// Sway layout tree node.
 pub const Node = struct {
     id: u32,
@@ -72,18 +42,36 @@ pub const Node = struct {
     marks: []const []const u8,
     focused: bool,
     nodes: []@This(),
+    floating_nodes: []@This(),
 };
 
+fn containsFocused(node: Node) bool {
+    if (node.focused) return true;
+    for (node.nodes) |node_inner|
+        if (containsFocused(node_inner)) return true;
+    for (node.floating_nodes) |node_inner|
+        if (containsFocused(node_inner)) return true;
+    return false;
+}
+
 pub fn workspaceFocused() !Node {
-    const string = try isolateFocused(try get());
-    return std.json.parseFromSliceLeaky(Node, main.fba, string, .{
+    const string = try get();
+    const parsed = try std.json.parseFromSliceLeaky(Node, main.fba, string, .{
         .ignore_unknown_fields = true,
     });
+    for (parsed.nodes) |output|
+        for (output.nodes) |workspace|
+            if (containsFocused(workspace)) return workspace;
+    return error.NotFound;
 }
 
 pub fn workspaceAll() ![]Node {
-    const string = try isolateAll(try get());
-    return std.json.parseFromSliceLeaky([]Node, main.fba, string, .{
+    const string = try get();
+    const parsed = try std.json.parseFromSliceLeaky(Node, main.fba, string, .{
         .ignore_unknown_fields = true,
     });
+    for (parsed.nodes) |output|
+        if (containsFocused(output))
+            return output.nodes;
+    return error.NotFound;
 }

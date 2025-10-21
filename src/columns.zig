@@ -63,20 +63,38 @@ pub fn move(direction: MoveDirection) !void {
 }
 
 /// Argument to the focus command.
-pub const FocusTarget = enum { column, window, toggle };
+pub const FocusTarget = enum { window, column, workspace, toggle };
 
 /// Focus column or window.
 pub fn focus(target: FocusTarget) !void {
-    if (target != .column)
-        for ((try tree.workspaceFocused()).nodes) |container|
-            if (container.focused) {
-                try socket.write(&run_writer, .command, "focus child");
-                return socket.discard(&run_reader);
-            };
-    if (target != .window) {
-        try socket.write(&run_writer, .command, "focus parent");
-        return socket.discard(&run_reader);
-    }
+    const focused: enum { window, column, workspace } = block: {
+        const workspace = try tree.workspaceFocused();
+        if (workspace.focused) break :block .workspace;
+        for (workspace.nodes) |column| {
+            if (column.focused) break :block .column;
+            for (column.nodes) |window|
+                if (window.focused) break :block .window;
+        } else return;
+    };
+    const payload = switch (focused) {
+        .window => switch (target) {
+            .window => return,
+            .column, .toggle => "focus parent",
+            .workspace => "focus parent; focus parent",
+        },
+        .column => switch (target) {
+            .window => "focus child",
+            .column => return,
+            .workspace, .toggle => "focus parent",
+        },
+        .workspace => switch (target) {
+            .window, .toggle => "focus child; focus child",
+            .column => "focus child",
+            .workspace => return,
+        },
+    };
+    try socket.write(&run_writer, .command, payload);
+    try socket.discard(&run_reader);
 }
 
 /// Argument to the layout command.
