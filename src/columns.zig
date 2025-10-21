@@ -42,9 +42,9 @@ pub fn move(direction: MoveDirection) !void {
                 columns[index_container + 1].id
             else
                 return;
-            try socket.write(&run_writer, .command, try std.fmt.allocPrint(main.fba,
+            try socket.print(&run_writer, .command,
                 \\swap container with con_id {d}
-            , .{swap_id}));
+            , .{swap_id});
             return socket.discard(&run_reader);
         }
         const windows = container.nodes;
@@ -53,9 +53,9 @@ pub fn move(direction: MoveDirection) !void {
                 (direction != .up or index_window != 0) and
                 (direction != .down or index_window != windows.len - 1);
             if (focused_middle) {
-                try socket.write(&run_writer, .command, try std.fmt.allocPrint(main.fba,
+                try socket.print(&run_writer, .command,
                     \\ move {t}
-                , .{direction}));
+                , .{direction});
                 return socket.discard(&run_reader);
             }
         }
@@ -106,14 +106,14 @@ pub fn layout(mode: LayoutMode) !void {
         if (mode == .toggle) "toggle splitv stacking" else @tagName(mode);
     for ((try tree.workspaceFocused()).nodes) |column|
         if (column.focused) {
-            try socket.write(&run_writer, .command, try std.fmt.allocPrint(main.fba,
+            try socket.print(&run_writer, .command,
                 \\focus child; layout {s}; focus parent
-            , .{layout_mode}));
+            , .{layout_mode});
             return socket.discard(&run_reader);
         };
-    try socket.write(&run_writer, .command, try std.fmt.allocPrint(main.fba,
+    try socket.print(&run_writer, .command,
         \\layout {s}
-    , .{layout_mode}));
+    , .{layout_mode});
     return socket.discard(&run_reader);
 }
 
@@ -132,13 +132,13 @@ pub fn drop() !void {
         if (drag_column == drop_column) break :outer "swap container with";
     } else "move";
     // zig fmt: off
-    try socket.write(&run_writer, .command, try std.fmt.allocPrint(main.fba,
+    try socket.print(&run_writer, .command,
         \\[con_mark = swaycolumns_drag]
         ++ \\    {s} mark swaycolumns_drop,
         ++ \\    unmark swaycolumns_drag,
         ++ \\    focus;
         ++ \\[con_mark = swaycolumns_drop] unmark swaycolumns_drop
-    , .{action}));
+    , .{action});
     // zig fmt: on
     try socket.discard(&run_reader);
 }

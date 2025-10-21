@@ -36,6 +36,17 @@ pub fn write(
     try writer.interface.writeAll(payload);
 }
 
+pub fn print(
+    writer: *std.net.Stream.Writer,
+    message_type: MessageType,
+    comptime fmt: []const u8,
+    args: anytype,
+) !void {
+    const payload = try std.fmt.allocPrint(main.fba, fmt, args);
+    try writer.interface.writeAll(&ipcHeader(payload.len, message_type));
+    try writer.interface.writeAll(payload);
+}
+
 fn len(reader: *std.net.Stream.Reader) !u32 {
     const header = try reader.interface().readAlloc(main.fba, 14);
     return std.mem.readInt(u32, header[6..10], endian);
