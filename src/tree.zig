@@ -19,13 +19,6 @@ pub fn deinit() void {
     std.net.Stream.Writer.getStream(&tree_writer).close();
 }
 
-/// Quickly ensure that the given string is a JSON-encoded Sway layout tree.
-inline fn isCorrect(tree_str: []const u8) bool {
-    return tree_str.len >= 1000 and
-        tree_str[0] == '{' and
-        tree_str[tree_str.len - 1] == '}';
-}
-
 /// Sway layout tree node.
 pub const Node = struct {
     id: u32,
@@ -41,7 +34,6 @@ pub const Node = struct {
 fn get() !Node {
     try socket.write(&tree_writer, .tree, "");
     const string = try socket.read(&tree_reader);
-    std.debug.assert(isCorrect(string));
     return std.json.parseFromSliceLeaky(Node, main.fba, string, .{
         .ignore_unknown_fields = true,
     });

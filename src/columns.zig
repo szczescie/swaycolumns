@@ -245,7 +245,7 @@ pub fn start() !void {
             error.WorkspaceNotFound,
             => {
                 std.log.err("{}\n", .{err});
-                std.Thread.sleep(5 * std.time.ns_per_s);
+                std.Thread.sleep(1 * std.time.ns_per_s);
                 continue;
             },
             else => return err,
