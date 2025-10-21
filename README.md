@@ -1,12 +1,24 @@
 ## Installation
 
-```bash
-zig build -Doptimize=ReleaseFast --prefix ~/.local
-fish_add_path ~/.local/bin
+```console
+❯ zig build -Doptimize=ReleaseFast --prefix ~/.local
+❯ fish_add_path ~/.local/bin
 ```
 
 ## Usage
-```bash
+```console
+❯ swaycolumns --help
+Usage: swaycolumns [command] [parameter]
+
+  start [modifier]    Start the daemon and use the specified floating modifier.
+  move <direction>    Move windows or swap columns.
+  focus <target>      Focus window, column or workspace.
+  layout <mode>       Switch column layout to splitv or stacking.
+
+  -h, --help          Print this message and quit.
+```
+
+```console
 default_orientation horizontal
 
 bindsym {
@@ -23,7 +35,6 @@ exec {
     swaycolumns start
 }
 ```
-
 
 ## Dog
 <img src="dog.jpg" alt="dog" width="400"/>
