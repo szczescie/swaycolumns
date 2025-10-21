@@ -146,15 +146,15 @@ pub fn drop() !void {
 const Event = struct { change: []const u8, container: ?tree.Node = null };
 var dragging_bindsym = false;
 
-fn dragging(event: Event) !void {
+fn dragging(mod: []const u8, event: Event) !void {
     const container = event.container orelse return;
     if (std.mem.eql(u8, container.type, "floating_con")) {
         if (dragging_bindsym) {
             dragging_bindsym = false;
-            try socket.write(&run_writer, .run,
-                \\unbindsym --whole-window super+button1;
-                \\unbindsym --whole-window --release super+button1
-            );
+            try socket.print(&run_writer, .run,
+                \\unbindsym --whole-window {0s}+button1;
+                \\unbindsym --whole-window --release {0s}+button1
+            , .{mod});
             try socket.discard(&run_reader);
         }
         return;
@@ -162,13 +162,13 @@ fn dragging(event: Event) !void {
     if (!dragging_bindsym) {
         dragging_bindsym = true;
         // zig fmt: off
-        try socket.write(&run_writer, .run,
-            \\bindsym --whole-window super+button1 mark --add swaycolumns_drag;
-            \\bindsym --whole-window --release super+button1 "
+        try socket.print(&run_writer, .run,
+            \\bindsym --whole-window {0s}+button1 mark --add swaycolumns_drag;
+            \\bindsym --whole-window --release {0s}+button1 "
             ++ \\    mark --add swaycolumns_drop;
             ++ \\    exec swaycolumns drop
             ++ \\"
-        );
+        , .{mod});
         // zig fmt: on
         try socket.discard(&run_reader);
     }
@@ -211,12 +211,13 @@ pub fn arrange() !void {
 }
 
 /// Modify the layout tree.
-fn apply() !bool {
+fn apply(mod: []const u8) !bool {
     const string = try socket.read(&subscribe_reader);
     const event = try std.json.parseFromSliceLeaky(Event, main.fba, string, .{
         .ignore_unknown_fields = true,
     });
     if (std.mem.eql(u8, event.change, "exit")) return true;
+    if (std.mem.eql(u8, event.change, "reload")) dragging_bindsym = false;
     const tree_changed =
         std.mem.eql(u8, event.change, "focus") or
         std.mem.eql(u8, event.change, "new") or
@@ -224,21 +225,21 @@ fn apply() !bool {
         std.mem.eql(u8, event.change, "floating") or
         std.mem.eql(u8, event.change, "move");
     if (tree_changed) {
-        try dragging(event);
+        try dragging(mod, event);
         try arrange();
     }
     return false;
 }
 
 /// Subscribe to window events and run the main loop.
-pub fn start() !void {
+pub fn start(mod: []const u8) !void {
     const events = "[\"window\", \"workspace\", \"shutdown\"]";
     try socket.write(&subscribe_writer, .subscribe, events);
     _ = try socket.read(&subscribe_reader);
     try arrange();
     while (true) {
         defer main.fba_state.reset();
-        const exited = apply() catch |err| switch (err) {
+        const exited = apply(mod) catch |err| switch (err) {
             error.OutOfMemory,
             error.SyntaxError,
             error.UnexpectedEndOfInput,

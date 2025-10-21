@@ -25,7 +25,7 @@ fn help() !void {
     try stdout_writer.interface.writeAll(
         \\Usage: swaycolumns [command] [parameter]
         \\
-        \\  start               Start the daemon.
+        \\  start [modifier]    Start the daemon and use the specified floating modifier
         \\  move <direction>    Move windows or swap columns.
         \\  focus <target>      Focus window, column or workspace.
         \\  layout <mode>       Switch column layout to splitv or stacking.
@@ -44,9 +44,7 @@ pub fn main() !void {
     const subcommand_arg = args.next() orelse
         std.process.fatal("missing subcommand", .{});
     switch (stringToSubcommand(subcommand_arg)) {
-        .@"-h", .@"--help" => try help(),
-        .start => try columns.start(),
-        .drop => try columns.drop(),
+        .start => try columns.start(args.next() orelse "super"),
         .move, .focus, .layout => |subcommand| {
             const parameter_arg = args.next() orelse std.process.fatal(
                 \\ {s} is missing a parameter
@@ -64,5 +62,7 @@ pub fn main() !void {
                 else => unreachable,
             }
         },
+        .drop => try columns.drop(),
+        .@"-h", .@"--help" => try help(),
     }
 }
