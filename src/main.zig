@@ -8,7 +8,7 @@ var fba_buf: [1024 * 1024]u8 = undefined;
 pub var fba_state = std.heap.FixedBufferAllocator.init(&fba_buf);
 pub const fba = fba_state.allocator();
 
-const Subcommand = enum { start, focus, move, layout };
+const Subcommand = enum { start, focus, move, layout, drop };
 
 fn stringToSubcommand(string: []const u8) Subcommand {
     return std.meta.stringToEnum(Subcommand, string) orelse
@@ -29,19 +29,20 @@ pub fn main() !void {
     const subcommand_arg = args.next() orelse
         std.process.fatal("missing subcommand", .{});
     switch (stringToSubcommand(subcommand_arg)) {
-        .start => try columns.layoutStart(),
+        .start => try columns.start(),
+        .drop => try columns.drop(),
         .move, .focus, .layout => |subcommand| {
             const parameter_arg = args.next() orelse std.process.fatal(
                 \\ {s} is missing a parameter
             , .{subcommand_arg});
             switch (subcommand) {
-                .focus => try columns.containerFocus(
+                .focus => try columns.focus(
                     stringToParameter(columns.FocusTarget, parameter_arg),
                 ),
-                .move => try columns.containerMove(
+                .move => try columns.move(
                     stringToParameter(columns.MoveDirection, parameter_arg),
                 ),
-                .layout => try columns.containerLayout(
+                .layout => try columns.layout(
                     stringToParameter(columns.LayoutMode, parameter_arg),
                 ),
                 else => unreachable,

@@ -6,15 +6,19 @@ const main = @import("main.zig");
 const socket = @import("socket.zig");
 const tree = @import("tree.zig");
 
+var subscribe_writer: std.net.Stream.Writer = undefined;
 var subscribe_reader: std.net.Stream.Reader = undefined;
-const subscribe = subscribe_reader.interface();
 var run_writer: std.net.Stream.Writer = undefined;
-const run = &run_writer.interface;
+var run_reader: std.net.Stream.Reader = undefined;
 
 /// Connect to both sockets.
 pub fn init() !void {
-    subscribe_reader = socket.connect().reader(&.{});
-    run_writer = socket.connect().writer(&.{});
+    const subscribe_socket = socket.connect();
+    subscribe_writer = subscribe_socket.writer(&.{});
+    subscribe_reader = subscribe_socket.reader(&.{});
+    const run_socket = socket.connect();
+    run_writer = run_socket.writer(&.{});
+    run_reader = run_socket.reader(&.{});
     tree.init();
 }
 
@@ -27,32 +31,33 @@ pub fn deinit() void {
 /// Argument passed to the move command.
 pub const MoveDirection = enum { left, right, up, down };
 
-/// Move window or swap containers.
-pub fn containerMove(direction: MoveDirection) !void {
-    const containers = (try tree.workspaceFocused()).nodes;
-    for (containers, 0..) |container, index_container| {
+/// Move window or swap columns.
+pub fn move(direction: MoveDirection) !void {
+    const columns = (try tree.workspaceFocused()).nodes;
+    for (columns, 0..) |container, index_container| {
         if (container.focused) {
             const swap_id = if (direction == .left and index_container > 0)
-                containers[index_container - 1].id
-            else if (direction == .right and index_container < containers.len - 1)
-                containers[index_container + 1].id
+                columns[index_container - 1].id
+            else if (direction == .right and index_container < columns.len - 1)
+                columns[index_container + 1].id
             else
                 return;
-            return socket.write(run, .command, try std.fmt.allocPrint(
-                main.fba,
-                "swap container with con_id {d}",
-                .{swap_id},
-            ));
+            try socket.write(&run_writer, .command, try std.fmt.allocPrint(main.fba,
+                \\swap container with con_id {d}
+            , .{swap_id}));
+            return socket.discard(&run_reader);
         }
         const windows = container.nodes;
-        for (windows, 0..) |window, index_window| {
+        for (container.nodes, 0..) |window, index_window| {
             const focused_middle = window.focused and
                 (direction != .up or index_window != 0) and
                 (direction != .down or index_window != windows.len - 1);
-            if (focused_middle)
-                return socket.write(run, .command, try std.fmt.allocPrint(main.fba,
+            if (focused_middle) {
+                try socket.write(&run_writer, .command, try std.fmt.allocPrint(main.fba,
                     \\ move {t}
                 , .{direction}));
+                return socket.discard(&run_reader);
+            }
         }
     }
 }
@@ -61,34 +66,94 @@ pub fn containerMove(direction: MoveDirection) !void {
 pub const FocusTarget = enum { column, window, toggle };
 
 /// Focus column or window.
-pub fn containerFocus(target: FocusTarget) !void {
+pub fn focus(target: FocusTarget) !void {
     if (target != .column)
         for ((try tree.workspaceFocused()).nodes) |container|
-            if (container.focused)
-                return socket.write(run, .command, "focus child");
-    if (target != .window)
-        return socket.write(run, .command, "focus parent");
+            if (container.focused) {
+                try socket.write(&run_writer, .command, "focus child");
+                return socket.discard(&run_reader);
+            };
+    if (target != .window) {
+        try socket.write(&run_writer, .command, "focus parent");
+        return socket.discard(&run_reader);
+    }
 }
 
 /// Argument to the layout command.
 pub const LayoutMode = enum { splitv, stacking, toggle };
 
 /// Switch the column's layout.
-pub fn containerLayout(mode: LayoutMode) !void {
-    const layout =
+pub fn layout(mode: LayoutMode) !void {
+    const layout_mode =
         if (mode == .toggle) "toggle splitv stacking" else @tagName(mode);
-    for ((try tree.workspaceFocused()).nodes) |container|
-        if (container.focused)
-            return socket.write(run, .command, try std.fmt.allocPrint(main.fba,
+    for ((try tree.workspaceFocused()).nodes) |column|
+        if (column.focused) {
+            try socket.write(&run_writer, .command, try std.fmt.allocPrint(main.fba,
                 \\focus child; layout {s}; focus parent
-            , .{layout}));
-    return socket.write(run, .command, try std.fmt.allocPrint(main.fba,
+            , .{layout_mode}));
+            return socket.discard(&run_reader);
+        };
+    try socket.write(&run_writer, .command, try std.fmt.allocPrint(main.fba,
         \\layout {s}
-    , .{layout}));
+    , .{layout_mode}));
+    return socket.discard(&run_reader);
+}
+
+pub fn drop() !void {
+    const action = outer: for ((try tree.workspaceFocused()).nodes) |column| {
+        const drag_column = inner: for (column.nodes) |window| {
+            for (window.marks) |mark|
+                if (std.mem.eql(u8, mark, "swaycolumns_drag"))
+                    break :inner column.id;
+        } else continue;
+        const drop_column = inner: for (column.nodes) |window| {
+            for (window.marks) |mark|
+                if (std.mem.eql(u8, mark, "swaycolumns_drop"))
+                    break :inner column.id;
+        } else continue;
+        if (drag_column == drop_column) break :outer "swap container with";
+    } else "move";
+    // zig fmt: off
+    try socket.write(&run_writer, .command, try std.fmt.allocPrint(main.fba,
+        \\[con_mark = swaycolumns_drag]
+        ++ \\    {s} mark swaycolumns_drop,
+        ++ \\    unmark swaycolumns_drag,
+        ++ \\    focus;
+        ++ \\[con_mark = swaycolumns_drop] unmark swaycolumns_drop
+    , .{action}));
+    // zig fmt: on
+    try socket.discard(&run_reader);
+}
+
+fn dragging(event: []const u8) !void {
+    const Container = struct { container: tree.Node };
+    const parsed = std.json.parseFromSliceLeaky(Container, main.fba, event, .{
+        .ignore_unknown_fields = true,
+    }) catch |err| switch (err) {
+        error.MissingField => return,
+        else => return err,
+    };
+    if (std.mem.eql(u8, parsed.container.type, "floating_con")) {
+        try socket.write(&run_writer, .command,
+            \\unbindsym --whole-window super+button1;
+            \\unbindsym --whole-window --release super+button1
+        );
+        return socket.discard(&run_reader);
+    }
+    // zig fmt: off
+    try socket.write(&run_writer, .command,
+        \\bindsym --whole-window super+button1 mark --add swaycolumns_drag;
+        \\bindsym --whole-window --release super+button1 "
+        ++ \\    mark --add swaycolumns_drop;
+        ++ \\    exec swaycolumns drop
+        ++ \\"
+    );
+    // zig fmt: on
+    return socket.discard(&run_reader);
 }
 
 /// Split windows or flatten containers.
-pub fn layoutArrange() !void {
+pub fn arrange() !void {
     var command: std.ArrayList(u8) = .empty;
     for (try tree.workspaceAll()) |workspace| {
         const columns = workspace.nodes;
@@ -102,10 +167,9 @@ pub fn layoutArrange() !void {
             try command.print(main.fba,
                 \\[con_id={d}] move right, move left; 
             , .{columns[0].id});
-            for (0..columns[0].nodes.len) |_|
-                try command.print(main.fba,
-                    \\[con_id={d}] move up; 
-                , .{columns[0].id});
+            for (0..columns[0].nodes.len) |_| try command.print(main.fba,
+                \\[con_id={d}] move up; 
+            , .{columns[0].id});
             continue;
         }
         for (columns) |column| {
@@ -115,42 +179,45 @@ pub fn layoutArrange() !void {
                 , .{column.id});
             for (column.nodes) |window|
                 if (!std.mem.eql(u8, window.layout, "none"))
-                    for (0..columns.len) |_|
-                        try command.print(main.fba,
-                            \\[con_id={d}] move right; 
-                        , .{window.id});
+                    for (0..columns.len) |_| try command.print(main.fba,
+                        \\[con_id={d}] move right; 
+                    , .{window.id});
         }
     }
     if (command.items.len > 0)
-        return socket.write(run, .command, command.items);
+        return socket.write(&run_writer, .command, command.items);
 }
 
 /// Change the layout tree and reset buffer.
-fn layoutApply() !bool {
+fn apply() !bool {
     defer main.fba_state.reset();
-    const event =
-        try socket.readParse(subscribe, struct { change: []const u8 });
-    if (std.mem.eql(u8, event.change, "exit")) return true;
+    const event = try socket.read(&subscribe_reader);
+    const Change = struct { change: []const u8 };
+    const parsed = try std.json.parseFromSliceLeaky(Change, main.fba, event, .{
+        .ignore_unknown_fields = true,
+    });
+    if (std.mem.eql(u8, parsed.change, "exit")) return true;
     const tree_changed =
-        std.mem.eql(u8, event.change, "focus") or
-        std.mem.eql(u8, event.change, "new") or
-        std.mem.eql(u8, event.change, "close") or
-        std.mem.eql(u8, event.change, "floating") or
-        std.mem.eql(u8, event.change, "move");
-    if (tree_changed) try layoutArrange();
+        std.mem.eql(u8, parsed.change, "focus") or
+        std.mem.eql(u8, parsed.change, "new") or
+        std.mem.eql(u8, parsed.change, "close") or
+        std.mem.eql(u8, parsed.change, "floating") or
+        std.mem.eql(u8, parsed.change, "move");
+    if (tree_changed) {
+        try dragging(event);
+        try arrange();
+    }
     return false;
 }
 
 /// Subscribe to window events and run the main loop.
-pub fn layoutStart() !void {
-    const subscribe_stream = std.net.Stream.Reader.getStream(&subscribe_reader);
-    var subscribe_writer = subscribe_stream.writer(&.{});
-    const events = "[\"window\", \"shutdown\"]";
-    try socket.write(&subscribe_writer.interface, .subscribe, events);
-    _ = try socket.read(subscribe);
-    try layoutArrange();
+pub fn start() !void {
+    const events = "[\"window\", \"workspace\", \"shutdown\"]";
+    try socket.write(&subscribe_writer, .subscribe, events);
+    _ = try socket.read(&subscribe_reader);
+    try arrange();
     while (true) {
-        const exited = layoutApply() catch |err| switch (err) {
+        const exited = apply() catch |err| switch (err) {
             error.OutOfMemory,
             error.SyntaxError,
             error.UnexpectedEndOfInput,

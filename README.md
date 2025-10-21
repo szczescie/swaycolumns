@@ -7,7 +7,7 @@ fish_add_path ~/.local/bin
 
 ## Usage
 ```bash
-tiling_drag disable
+default_orientation horizontal
 
 bindsym {
     super+shift+right exec swaycolumns move right

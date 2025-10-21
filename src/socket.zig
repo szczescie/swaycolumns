@@ -5,6 +5,8 @@ const builtin = @import("builtin");
 
 const main = @import("main.zig");
 
+const endian = builtin.target.cpu.arch.endian();
+
 /// Establish a connection with the Sway socket.
 pub fn connect() std.net.Stream {
     const socket_path = std.posix.getenv("SWAYSOCK") orelse
@@ -26,25 +28,24 @@ inline fn ipcHeader(length: usize, message_type: MessageType) [14]u8 {
 
 /// Send a message to the Sway socket.
 pub fn write(
-    writer: *std.Io.Writer,
+    writer: *std.net.Stream.Writer,
     message_type: MessageType,
     payload: []const u8,
 ) !void {
-    try writer.writeAll(&ipcHeader(payload.len, message_type));
-    try writer.writeAll(payload);
+    try writer.interface.writeAll(&ipcHeader(payload.len, message_type));
+    try writer.interface.writeAll(payload);
+}
+
+fn len(reader: *std.net.Stream.Reader) !u32 {
+    const header = try reader.interface().readAlloc(main.fba, 14);
+    return std.mem.readInt(u32, header[6..10], endian);
 }
 
 /// Read a message from the Sway socket.
-pub fn read(reader: *std.Io.Reader) ![]const u8 {
-    const header = try reader.readAlloc(main.fba, 14);
-    const endian = builtin.target.cpu.arch.endian();
-    const payload_len = std.mem.readInt(u32, header[6..10], endian);
-    return reader.readAlloc(main.fba, payload_len);
+pub fn read(reader: *std.net.Stream.Reader) ![]const u8 {
+    return reader.interface().readAlloc(main.fba, try len(reader));
 }
 
-/// Read and parse a message from the Sway socket.
-pub fn readParse(reader: *std.Io.Reader, comptime T: type) !T {
-    return std.json.parseFromSliceLeaky(T, main.fba, try read(reader), .{
-        .ignore_unknown_fields = true,
-    });
+pub fn discard(reader: *std.net.Stream.Reader) !void {
+    _ = try reader.interface().discard(.limited(try len(reader)));
 }

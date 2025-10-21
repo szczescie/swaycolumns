@@ -6,15 +6,17 @@ const columns = @import("columns.zig");
 const main = @import("main.zig");
 const socket = @import("socket.zig");
 
+var tree_writer: std.net.Stream.Writer = undefined;
 var tree_reader: std.net.Stream.Reader = undefined;
-const tree = tree_reader.interface();
 
 pub fn init() void {
-    tree_reader = socket.connect().reader(&.{});
+    const tree_socket = socket.connect();
+    tree_writer = tree_socket.writer(&.{});
+    tree_reader = tree_socket.reader(&.{});
 }
 
 pub fn deinit() void {
-    std.net.Stream.Reader.getStream(&tree_reader).close();
+    std.net.Stream.Writer.getStream(&tree_writer).close();
 }
 
 /// Quickly ensure that the given string is a JSON-encoded Sway layout tree.
@@ -26,10 +28,8 @@ inline fn isCorrect(tree_str: []const u8) bool {
 
 /// Get the layout tree in JSON form.
 fn get() ![]const u8 {
-    const tree_stream = std.net.Stream.Reader.getStream(&tree_reader);
-    var tree_writer = tree_stream.writer(&.{});
-    try socket.write(&tree_writer.interface, .tree, "");
-    const tree_str = try socket.read(tree);
+    try socket.write(&tree_writer, .tree, "");
+    const tree_str = try socket.read(&tree_reader);
     std.debug.assert(isCorrect(tree_str));
     return tree_str;
 }
@@ -67,7 +67,9 @@ fn isolateFocused(tree_str: []const u8) ![]const u8 {
 /// Sway layout tree node.
 pub const Node = struct {
     id: u32,
+    type: []const u8,
     layout: []const u8,
+    marks: []const []const u8,
     focused: bool,
     nodes: []@This(),
 };
