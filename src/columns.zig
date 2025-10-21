@@ -101,9 +101,11 @@ pub const LayoutMode = enum { splitv, stacking, toggle };
 
 /// Switch the column's layout.
 pub fn layout(mode: LayoutMode) !void {
+    const workspace = try tree.workspaceFocused();
+    if (workspace.focused) return;
     const layout_mode =
         if (mode == .toggle) "toggle splitv stacking" else @tagName(mode);
-    for ((try tree.workspaceFocused()).nodes) |column|
+    for (workspace.nodes) |column|
         if (column.focused) {
             try socket.print(&run_writer, .run,
                 \\focus child; layout {s}; focus parent
