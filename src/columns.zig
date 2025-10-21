@@ -150,17 +150,16 @@ fn dragging(mod: []const u8, event: Event) !void {
     const container = event.container orelse return;
     if (std.mem.eql(u8, container.type, "floating_con")) {
         if (dragging_bindsym) {
-            dragging_bindsym = false;
             try socket.print(&run_writer, .run,
                 \\unbindsym --whole-window {0s}+button1;
                 \\unbindsym --whole-window --release {0s}+button1
             , .{mod});
             try socket.discard(&run_reader);
+            dragging_bindsym = false;
         }
         return;
     }
     if (!dragging_bindsym) {
-        dragging_bindsym = true;
         // zig fmt: off
         try socket.print(&run_writer, .run,
             \\bindsym --whole-window {0s}+button1 mark --add swaycolumns_drag;
@@ -171,6 +170,7 @@ fn dragging(mod: []const u8, event: Event) !void {
         , .{mod});
         // zig fmt: on
         try socket.discard(&run_reader);
+        dragging_bindsym = true;
     }
 }
 
@@ -245,7 +245,7 @@ pub fn start(mod: []const u8) !void {
             error.UnexpectedEndOfInput,
             error.WorkspaceNotFound,
             => {
-                std.log.err("{}\n", .{err});
+                std.log.err("{}", .{err});
                 std.Thread.sleep(1 * std.time.ns_per_s);
                 continue;
             },
