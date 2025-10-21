@@ -18,7 +18,7 @@ Usage: swaycolumns [command] [parameter]
   -h, --help          Print this message and quit.
 ```
 
-```console
+```
 default_orientation horizontal
 
 bindsym {
