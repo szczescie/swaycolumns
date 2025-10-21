@@ -30,13 +30,17 @@ pub const Node = struct {
     floating_nodes: []@This(),
 };
 
+pub fn parse(T: type, string: []const u8) T {
+    return std.json.parseFromSliceLeaky(T, main.fba, string, .{
+        .ignore_unknown_fields = true,
+    });
+}
+
 /// Get the layout tree.
 fn get() !Node {
     try socket.write(&tree_writer, .tree, "");
     const string = try socket.read(&tree_reader);
-    return std.json.parseFromSliceLeaky(Node, main.fba, string, .{
-        .ignore_unknown_fields = true,
-    });
+    return parse(Node, string);
 }
 
 fn containsFocused(node: Node) bool {

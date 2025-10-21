@@ -212,10 +212,7 @@ pub fn arrange() !void {
 
 /// Modify the layout tree.
 fn apply(mod: []const u8) !bool {
-    const string = try socket.read(&subscribe_reader);
-    const event = try std.json.parseFromSliceLeaky(Event, main.fba, string, .{
-        .ignore_unknown_fields = true,
-    });
+    const event = try tree.parse(Event, try socket.read(&subscribe_reader));
     if (std.mem.eql(u8, event.change, "exit")) return true;
     if (std.mem.eql(u8, event.change, "reload")) dragging_bindsym = false;
     const tree_changed =

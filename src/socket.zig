@@ -5,8 +5,6 @@ const builtin = @import("builtin");
 
 const main = @import("main.zig");
 
-const endian = builtin.target.cpu.arch.endian();
-
 /// Establish a connection with the Sway socket.
 pub fn connect() std.net.Stream {
     const socket_path = std.posix.getenv("SWAYSOCK") orelse
@@ -49,6 +47,7 @@ pub fn print(
 
 fn len(reader: *std.net.Stream.Reader) !u32 {
     const header = try reader.interface().readAlloc(main.fba, 14);
+    const endian = builtin.target.cpu.arch.endian();
     return std.mem.readInt(u32, header[6..10], endian);
 }
 
