@@ -245,7 +245,7 @@ pub fn start(mod: []const u8) !void {
             error.UnexpectedEndOfInput,
             error.WorkspaceNotFound,
             => {
-                std.log.err("{}", .{err});
+                std.log.debug("{}", .{err});
                 std.Thread.sleep(1 * std.time.ns_per_s);
                 continue;
             },
