@@ -42,10 +42,11 @@ pub fn move(direction: MoveDirection) !void {
                 columns[index_container + 1].id
             else
                 return;
-            try socket.print(&run_writer, .command,
+            try socket.print(&run_writer, .run,
                 \\swap container with con_id {d}
             , .{swap_id});
-            return socket.discard(&run_reader);
+            try socket.discard(&run_reader);
+            return;
         }
         const windows = container.nodes;
         for (container.nodes, 0..) |window, index_window| {
@@ -53,10 +54,9 @@ pub fn move(direction: MoveDirection) !void {
                 (direction != .up or index_window != 0) and
                 (direction != .down or index_window != windows.len - 1);
             if (focused_middle) {
-                try socket.print(&run_writer, .command,
-                    \\ move {t}
-                , .{direction});
-                return socket.discard(&run_reader);
+                try socket.print(&run_writer, .run, "move {t}", .{direction});
+                try socket.discard(&run_reader);
+                return;
             }
         }
     }
@@ -76,7 +76,7 @@ pub fn focus(target: FocusTarget) !void {
                 if (window.focused) break :block .window;
         } else return;
     };
-    const payload = switch (focused) {
+    try socket.write(&run_writer, .run, switch (focused) {
         .window => switch (target) {
             .window => return,
             .column, .toggle => "focus parent",
@@ -92,8 +92,7 @@ pub fn focus(target: FocusTarget) !void {
             .column => "focus child",
             .workspace => return,
         },
-    };
-    try socket.write(&run_writer, .command, payload);
+    });
     try socket.discard(&run_reader);
 }
 
@@ -106,15 +105,14 @@ pub fn layout(mode: LayoutMode) !void {
         if (mode == .toggle) "toggle splitv stacking" else @tagName(mode);
     for ((try tree.workspaceFocused()).nodes) |column|
         if (column.focused) {
-            try socket.print(&run_writer, .command,
+            try socket.print(&run_writer, .run,
                 \\focus child; layout {s}; focus parent
             , .{layout_mode});
-            return socket.discard(&run_reader);
+            try socket.discard(&run_reader);
+            return;
         };
-    try socket.print(&run_writer, .command,
-        \\layout {s}
-    , .{layout_mode});
-    return socket.discard(&run_reader);
+    try socket.print(&run_writer, .run, "layout {s}", .{layout_mode});
+    try socket.discard(&run_reader);
 }
 
 pub fn drop() !void {
@@ -132,7 +130,7 @@ pub fn drop() !void {
         if (drag_column == drop_column) break :outer "swap container with";
     } else "move";
     // zig fmt: off
-    try socket.print(&run_writer, .command,
+    try socket.print(&run_writer, .run,
         \\[con_mark = swaycolumns_drag]
         ++ \\    {s} mark swaycolumns_drop,
         ++ \\    unmark swaycolumns_drag,
@@ -150,19 +148,19 @@ fn dragging(event: Event) !void {
     const container = event.container orelse return;
     if (std.mem.eql(u8, container.type, "floating_con")) {
         if (dragging_bindsym) {
-            try socket.write(&run_writer, .command,
+            dragging_bindsym = false;
+            try socket.write(&run_writer, .run,
                 \\unbindsym --whole-window super+button1;
                 \\unbindsym --whole-window --release super+button1
             );
             try socket.discard(&run_reader);
-            dragging_bindsym = false;
-            return;
         }
         return;
     }
     if (!dragging_bindsym) {
+        dragging_bindsym = true;
         // zig fmt: off
-        try socket.write(&run_writer, .command,
+        try socket.write(&run_writer, .run,
             \\bindsym --whole-window super+button1 mark --add swaycolumns_drag;
             \\bindsym --whole-window --release super+button1 "
             ++ \\    mark --add swaycolumns_drop;
@@ -171,7 +169,6 @@ fn dragging(event: Event) !void {
         );
         // zig fmt: on
         try socket.discard(&run_reader);
-        dragging_bindsym = true;
     }
 }
 
@@ -208,7 +205,7 @@ pub fn arrange() !void {
         }
     }
     if (command.items.len > 0)
-        return socket.write(&run_writer, .command, command.items);
+        try socket.write(&run_writer, .run, command.items);
 }
 
 /// Modify the layout tree.

@@ -26,14 +26,6 @@ inline fn isCorrect(tree_str: []const u8) bool {
         tree_str[tree_str.len - 1] == '}';
 }
 
-/// Get the layout tree in JSON form.
-fn get() ![]const u8 {
-    try socket.write(&tree_writer, .tree, "");
-    const tree_str = try socket.read(&tree_reader);
-    std.debug.assert(isCorrect(tree_str));
-    return tree_str;
-}
-
 /// Sway layout tree node.
 pub const Node = struct {
     id: u32,
@@ -45,6 +37,16 @@ pub const Node = struct {
     floating_nodes: []@This(),
 };
 
+/// Get the layout tree.
+fn get() !Node {
+    try socket.write(&tree_writer, .tree, "");
+    const string = try socket.read(&tree_reader);
+    std.debug.assert(isCorrect(string));
+    return std.json.parseFromSliceLeaky(Node, main.fba, string, .{
+        .ignore_unknown_fields = true,
+    });
+}
+
 fn containsFocused(node: Node) bool {
     if (node.focused) return true;
     for (node.nodes) |node_inner|
@@ -55,23 +57,14 @@ fn containsFocused(node: Node) bool {
 }
 
 pub fn workspaceFocused() !Node {
-    const string = try get();
-    const tree = try std.json.parseFromSliceLeaky(Node, main.fba, string, .{
-        .ignore_unknown_fields = true,
-    });
-    for (tree.nodes) |output|
+    for ((try get()).nodes) |output|
         for (output.nodes) |workspace|
             if (containsFocused(workspace)) return workspace;
     return error.WorkspaceNotFound;
 }
 
 pub fn workspaceAll() ![]Node {
-    const string = try get();
-    const tree = try std.json.parseFromSliceLeaky(Node, main.fba, string, .{
-        .ignore_unknown_fields = true,
-    });
-    for (tree.nodes) |output|
-        if (containsFocused(output))
-            return output.nodes;
+    for ((try get()).nodes) |output|
+        if (containsFocused(output)) return output.nodes;
     return error.WorkspaceNotFound;
 }

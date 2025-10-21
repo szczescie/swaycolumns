@@ -17,7 +17,7 @@ pub fn connect() std.net.Stream {
 }
 
 /// Non-exhaustive list of Sway IPC message types.
-pub const MessageType = enum(u32) { command = 0, subscribe = 2, tree = 4 };
+pub const MessageType = enum(u32) { run = 0, subscribe = 2, tree = 4 };
 
 /// Cast as 4 bytes.
 inline fn ipcHeader(length: usize, message_type: MessageType) [14]u8 {
