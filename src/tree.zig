@@ -56,22 +56,22 @@ fn containsFocused(node: Node) bool {
 
 pub fn workspaceFocused() !Node {
     const string = try get();
-    const parsed = try std.json.parseFromSliceLeaky(Node, main.fba, string, .{
+    const tree = try std.json.parseFromSliceLeaky(Node, main.fba, string, .{
         .ignore_unknown_fields = true,
     });
-    for (parsed.nodes) |output|
+    for (tree.nodes) |output|
         for (output.nodes) |workspace|
             if (containsFocused(workspace)) return workspace;
-    return error.NotFound;
+    return error.WorkspaceNotFound;
 }
 
 pub fn workspaceAll() ![]Node {
     const string = try get();
-    const parsed = try std.json.parseFromSliceLeaky(Node, main.fba, string, .{
+    const tree = try std.json.parseFromSliceLeaky(Node, main.fba, string, .{
         .ignore_unknown_fields = true,
     });
-    for (parsed.nodes) |output|
+    for (tree.nodes) |output|
         if (containsFocused(output))
             return output.nodes;
-    return error.NotFound;
+    return error.WorkspaceNotFound;
 }

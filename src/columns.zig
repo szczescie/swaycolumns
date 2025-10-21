@@ -143,17 +143,12 @@ pub fn drop() !void {
     try socket.discard(&run_reader);
 }
 
+const Event = struct { change: []const u8, container: ?tree.Node = null };
 var dragging_bindsym = false;
 
-fn dragging(event: []const u8) !void {
-    const Container = struct { container: tree.Node };
-    const parsed = std.json.parseFromSliceLeaky(Container, main.fba, event, .{
-        .ignore_unknown_fields = true,
-    }) catch |err| switch (err) {
-        error.MissingField => return,
-        else => return err,
-    };
-    if (std.mem.eql(u8, parsed.container.type, "floating_con")) {
+fn dragging(event: Event) !void {
+    const container = event.container orelse return;
+    if (std.mem.eql(u8, container.type, "floating_con")) {
         if (dragging_bindsym) {
             try socket.write(&run_writer, .command,
                 \\unbindsym --whole-window super+button1;
@@ -216,21 +211,19 @@ pub fn arrange() !void {
         return socket.write(&run_writer, .command, command.items);
 }
 
-/// Change the layout tree and reset buffer.
+/// Modify the layout tree.
 fn apply() !bool {
-    defer main.fba_state.reset();
-    const event = try socket.read(&subscribe_reader);
-    const Change = struct { change: []const u8 };
-    const parsed = try std.json.parseFromSliceLeaky(Change, main.fba, event, .{
+    const string = try socket.read(&subscribe_reader);
+    const event = try std.json.parseFromSliceLeaky(Event, main.fba, string, .{
         .ignore_unknown_fields = true,
     });
-    if (std.mem.eql(u8, parsed.change, "exit")) return true;
+    if (std.mem.eql(u8, event.change, "exit")) return true;
     const tree_changed =
-        std.mem.eql(u8, parsed.change, "focus") or
-        std.mem.eql(u8, parsed.change, "new") or
-        std.mem.eql(u8, parsed.change, "close") or
-        std.mem.eql(u8, parsed.change, "floating") or
-        std.mem.eql(u8, parsed.change, "move");
+        std.mem.eql(u8, event.change, "focus") or
+        std.mem.eql(u8, event.change, "new") or
+        std.mem.eql(u8, event.change, "close") or
+        std.mem.eql(u8, event.change, "floating") or
+        std.mem.eql(u8, event.change, "move");
     if (tree_changed) {
         try dragging(event);
         try arrange();
@@ -245,11 +238,12 @@ pub fn start() !void {
     _ = try socket.read(&subscribe_reader);
     try arrange();
     while (true) {
+        defer main.fba_state.reset();
         const exited = apply() catch |err| switch (err) {
             error.OutOfMemory,
             error.SyntaxError,
             error.UnexpectedEndOfInput,
-            error.NotFound,
+            error.WorkspaceNotFound,
             => {
                 std.log.err("{}\n", .{err});
                 std.Thread.sleep(5 * std.time.ns_per_s);
