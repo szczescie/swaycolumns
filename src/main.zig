@@ -8,7 +8,7 @@ var fba_buf: [1024 * 1024]u8 = undefined;
 pub var fba_state = std.heap.FixedBufferAllocator.init(&fba_buf);
 pub const fba = fba_state.allocator();
 
-const Subcommand = enum { start, focus, move, layout, drop };
+const Subcommand = enum { start, focus, move, layout, drop, @"-h", @"--help" };
 
 fn stringToSubcommand(string: []const u8) Subcommand {
     return std.meta.stringToEnum(Subcommand, string) orelse
@@ -20,6 +20,21 @@ fn stringToParameter(comptime T: type, string: []const u8) T {
         std.process.fatal("{s} is an invalid parameter", .{string});
 }
 
+fn help() !void {
+    var stdout_writer = std.fs.File.stdout().writer(&.{});
+    try stdout_writer.interface.writeAll(
+        \\Usage: swaycolumns [command] [parameter]
+        \\
+        \\  start               Start the daemon.
+        \\  move <direction>    Move windows or swap columns.
+        \\  focus <target>      Focus window, column or workspace.
+        \\  layout <mode>       Switch column layout to splitv or stacking.
+        \\
+        \\  -h, --help          Print this message and quit.
+        \\
+    );
+}
+
 /// Run the program.
 pub fn main() !void {
     try columns.init();
@@ -29,6 +44,7 @@ pub fn main() !void {
     const subcommand_arg = args.next() orelse
         std.process.fatal("missing subcommand", .{});
     switch (stringToSubcommand(subcommand_arg)) {
+        .@"-h", .@"--help" => try help(),
         .start => try columns.start(),
         .drop => try columns.drop(),
         .move, .focus, .layout => |subcommand| {
