@@ -44,7 +44,7 @@ const Socket = struct {
         return socket;
     }
 
-    pub fn deinit(socket: *@This()) void {
+    pub fn deinit(socket: @This()) void {
         std.net.Stream.Reader.getStream(&socket.reader).close();
     }
 
@@ -111,7 +111,7 @@ pub fn init() !void {
 }
 
 pub fn deinit() void {
-    std.net.Stream.Reader.getStream(&subscribe.reader).close();
-    std.net.Stream.Reader.getStream(&run.reader).close();
-    std.net.Stream.Reader.getStream(&tree.reader).close();
+    subscribe.deinit();
+    run.deinit();
+    tree.deinit();
 }
