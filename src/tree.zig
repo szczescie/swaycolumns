@@ -2,24 +2,8 @@
 
 const std = @import("std");
 
-const columns = @import("columns.zig");
-const main = @import("main.zig");
 const socket = @import("socket.zig");
 
-var tree_writer: std.net.Stream.Writer = undefined;
-var tree_reader: std.net.Stream.Reader = undefined;
-
-pub fn init() void {
-    const tree_socket = socket.connect();
-    tree_writer = tree_socket.writer(&.{});
-    tree_reader = tree_socket.reader(&.{});
-}
-
-pub fn deinit() void {
-    std.net.Stream.Writer.getStream(&tree_writer).close();
-}
-
-/// Sway layout tree node.
 pub const Node = struct {
     id: u32,
     type: []const u8,
@@ -30,17 +14,10 @@ pub const Node = struct {
     floating_nodes: []@This(),
 };
 
-pub fn parse(T: type, string: []const u8) !T {
-    return std.json.parseFromSliceLeaky(T, main.fba, string, .{
-        .ignore_unknown_fields = true,
-    });
-}
-
-/// Get the layout tree.
 fn get() !Node {
-    try socket.write(&tree_writer, .tree, "");
-    const string = try socket.read(&tree_reader);
-    return parse(Node, string);
+    try socket.tree.write("");
+    try socket.tree.commit();
+    return socket.tree.parse(Node);
 }
 
 fn containsFocused(node: Node) bool {

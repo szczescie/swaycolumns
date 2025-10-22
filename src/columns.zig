@@ -2,72 +2,36 @@
 
 const std = @import("std");
 
-const main = @import("main.zig");
-const socket = @import("socket.zig");
+const command = @import("command.zig");
 const tree = @import("tree.zig");
 
-var subscribe_writer: std.net.Stream.Writer = undefined;
-var subscribe_reader: std.net.Stream.Reader = undefined;
-var run_writer: std.net.Stream.Writer = undefined;
-var run_reader: std.net.Stream.Reader = undefined;
-
-/// Connect to both sockets.
-pub fn init() !void {
-    const subscribe_socket = socket.connect();
-    subscribe_writer = subscribe_socket.writer(&.{});
-    subscribe_reader = subscribe_socket.reader(&.{});
-    const run_socket = socket.connect();
-    run_writer = run_socket.writer(&.{});
-    run_reader = run_socket.reader(&.{});
-    tree.init();
-}
-
-pub fn deinit() void {
-    std.net.Stream.Reader.getStream(&subscribe_reader).close();
-    std.net.Stream.Writer.getStream(&run_writer).close();
-    tree.deinit();
-}
-
-/// Argument passed to the move command.
-pub const MoveDirection = enum { left, right, up, down };
-
-/// Move window or swap columns.
-pub fn move(direction: MoveDirection) !void {
+pub fn move(direction: command.MoveDirection) !void {
     const columns = (try tree.workspaceFocused()).nodes;
-    for (columns, 0..) |container, index_container| {
-        if (container.focused) {
-            const swap_id = if (direction == .left and index_container > 0)
-                columns[index_container - 1].id
-            else if (direction == .right and index_container < columns.len - 1)
-                columns[index_container + 1].id
-            else
-                return;
-            try socket.print(&run_writer, .run,
-                \\swap container with con_id {d}
-            , .{swap_id});
-            try socket.discard(&run_reader);
-            return;
-        }
-        const windows = container.nodes;
-        for (container.nodes, 0..) |window, index_window| {
-            const focused_middle = window.focused and
-                (direction != .up or index_window != 0) and
-                (direction != .down or index_window != windows.len - 1);
-            if (focused_middle) {
-                try socket.print(&run_writer, .run, "move {t}", .{direction});
-                try socket.discard(&run_reader);
-                return;
-            }
-        }
+    for (columns, 0..) |column, column_index| {
+        if (!column.focused) continue;
+        if (direction == .left and column_index > 0)
+            try command.swap(columns[column_index - 1].id)
+        else if (direction == .right and column_index < columns.len - 1)
+            try command.swap(columns[column_index + 1].id);
+        try command.commit();
+        return;
     }
+    for (columns, 0..) |column, column_index|
+        for (column.nodes, 0..) |window, window_index| {
+            if (!window.focused) continue;
+            if (direction == .up and window_index == 0) continue;
+            if (direction == .down and
+                window_index == column.nodes.len - 1) continue;
+            try command.move(direction);
+            if (direction == .right and
+                column_index != columns.len - 1) try command.move(.down);
+            try command.commit();
+            return;
+        };
 }
 
-/// Argument to the focus command.
-pub const FocusTarget = enum { window, column, workspace, toggle };
-
-/// Focus column or window.
-pub fn focus(target: FocusTarget) !void {
-    const focused: enum { window, column, workspace } = block: {
+pub fn focus(target: command.FocusTarget) !void {
+    const focused: command.FocusCurrent = block: {
         const workspace = try tree.workspaceFocused();
         if (workspace.focused) break :block .workspace;
         for (workspace.nodes) |column| {
@@ -76,49 +40,25 @@ pub fn focus(target: FocusTarget) !void {
                 if (window.focused) break :block .window;
         } else return;
     };
-    try socket.write(&run_writer, .run, switch (focused) {
-        .window => switch (target) {
-            .window => return,
-            .column, .toggle => "focus parent",
-            .workspace => "focus parent; focus parent",
-        },
-        .column => switch (target) {
-            .window => "focus child",
-            .column => return,
-            .workspace, .toggle => "focus parent",
-        },
-        .workspace => switch (target) {
-            .window, .toggle => "focus child; focus child",
-            .column => "focus child",
-            .workspace => return,
-        },
-    });
-    try socket.discard(&run_reader);
+    try command.focus(focused, target);
+    try command.commit();
 }
 
-/// Argument to the layout command.
-pub const LayoutMode = enum { splitv, stacking, toggle };
-
-/// Switch the column's layout.
-pub fn layout(mode: LayoutMode) !void {
+pub fn layout(mode: command.LayoutMode) !void {
     const workspace = try tree.workspaceFocused();
     if (workspace.focused) return;
-    const layout_mode =
-        if (mode == .toggle) "toggle splitv stacking" else @tagName(mode);
-    for (workspace.nodes) |column|
-        if (column.focused) {
-            try socket.print(&run_writer, .run,
-                \\focus child; layout {s}; focus parent
-            , .{layout_mode});
-            try socket.discard(&run_reader);
-            return;
-        };
-    try socket.print(&run_writer, .run, "layout {s}", .{layout_mode});
-    try socket.discard(&run_reader);
+    for (workspace.nodes) |column| {
+        if (!column.focused) continue;
+        try command.layout(.column, mode);
+        try command.commit();
+        return;
+    }
+    try command.layout(.window, mode);
+    try command.commit();
 }
 
 pub fn drop() !void {
-    const action = outer: for ((try tree.workspaceFocused()).nodes) |column| {
+    for ((try tree.workspaceFocused()).nodes) |column| {
         const drag_column = inner: for (column.nodes) |window| {
             for (window.marks) |mark|
                 if (std.mem.eql(u8, mark, "swaycolumns_drag"))
@@ -129,92 +69,56 @@ pub fn drop() !void {
                 if (std.mem.eql(u8, mark, "swaycolumns_drop"))
                     break :inner column.id;
         } else continue;
-        if (drag_column == drop_column) break :outer "swap container with";
-    } else "move";
-    // zig fmt: off
-    try socket.print(&run_writer, .run,
-        \\[con_mark = swaycolumns_drag]
-        ++ \\    {s} mark swaycolumns_drop,
-        ++ \\    unmark swaycolumns_drag,
-        ++ \\    focus;
-        ++ \\[con_mark = swaycolumns_drop] unmark swaycolumns_drop
-    , .{action});
-    // zig fmt: on
-    try socket.discard(&run_reader);
-}
-
-const Event = struct { change: []const u8, container: ?tree.Node = null };
-var dragging_bindsym = false;
-
-fn dragging(mod: []const u8, event: Event) !void {
-    const container = event.container orelse return;
-    if (std.mem.eql(u8, container.type, "floating_con")) {
-        if (dragging_bindsym) {
-            try socket.print(&run_writer, .run,
-                \\unbindsym --whole-window {0s}+button1;
-                \\unbindsym --whole-window --release {0s}+button1
-            , .{mod});
-            try socket.discard(&run_reader);
-            dragging_bindsym = false;
+        if (drag_column == drop_column) {
+            try command.drop(.swap);
+            try command.commit();
         }
         return;
     }
-    if (!dragging_bindsym) {
-        // zig fmt: off
-        try socket.print(&run_writer, .run,
-            \\bindsym --whole-window {0s}+button1 mark --add swaycolumns_drag;
-            \\bindsym --whole-window --release {0s}+button1 "
-            ++ \\    mark --add swaycolumns_drop;
-            ++ \\    exec swaycolumns drop
-            ++ \\"
-        , .{mod});
-        // zig fmt: on
-        try socket.discard(&run_reader);
-        dragging_bindsym = true;
+    try command.drop(.move);
+    try command.commit();
+}
+
+const Event = struct { change: []const u8, container: ?tree.Node = null };
+var drag_bindsym = false;
+
+fn drag(mod: []const u8, event: Event) !void {
+    const container = event.container orelse return;
+    if (std.mem.eql(u8, container.type, "floating_con")) {
+        if (drag_bindsym) {
+            try command.drag(.unbindsym, mod);
+            try command.commit();
+            drag_bindsym = false;
+        }
+        return;
+    }
+    if (!drag_bindsym) {
+        try command.drag(.bindsym, mod);
+        try command.commit();
+        drag_bindsym = true;
     }
 }
 
-/// Split windows or flatten containers.
 pub fn arrange() !void {
-    var command: std.ArrayList(u8) = .empty;
     for (try tree.workspaceAll()) |workspace| {
         const columns = workspace.nodes;
         if (columns.len == 1 and columns[0].nodes.len == 1) {
-            try command.print(main.fba,
-                \\[con_id={d}] split n; 
-            , .{columns[0].nodes[0].id});
+            try command.uncolumnise(columns);
             continue;
         }
         if (columns.len >= 1 and std.mem.eql(u8, workspace.layout, "splitv")) {
-            try command.print(main.fba,
-                \\[con_id={d}] move right, move left; 
-            , .{columns[0].id});
-            for (0..columns[0].nodes.len) |_| try command.print(main.fba,
-                \\[con_id={d}] move up; 
-            , .{columns[0].id});
+            try command.fixColumns(columns);
             continue;
         }
-        for (columns) |column| {
-            if (columns.len >= 2 and std.mem.eql(u8, column.layout, "none"))
-                try command.print(main.fba,
-                    \\[con_id={d}] split v; 
-                , .{column.id});
-            for (column.nodes) |window|
-                if (!std.mem.eql(u8, window.layout, "none"))
-                    for (0..columns.len) |_| try command.print(main.fba,
-                        \\[con_id={d}] move right; 
-                    , .{window.id});
-        }
+        try command.columnise(columns);
     }
-    if (command.items.len > 0)
-        try socket.write(&run_writer, .run, command.items);
+    if (command.len() > 14) try command.commit();
 }
 
-/// Modify the layout tree.
 fn apply(mod: []const u8) !bool {
-    const event = try tree.parse(Event, try socket.read(&subscribe_reader));
+    const event = try command.parse(Event);
     if (std.mem.eql(u8, event.change, "exit")) return true;
-    if (std.mem.eql(u8, event.change, "reload")) dragging_bindsym = false;
+    if (std.mem.eql(u8, event.change, "reload")) drag_bindsym = false;
     const tree_changed =
         std.mem.eql(u8, event.change, "focus") or
         std.mem.eql(u8, event.change, "new") or
@@ -222,20 +126,16 @@ fn apply(mod: []const u8) !bool {
         std.mem.eql(u8, event.change, "floating") or
         std.mem.eql(u8, event.change, "move");
     if (tree_changed) {
-        try dragging(mod, event);
+        try drag(mod, event);
         try arrange();
     }
     return false;
 }
 
-/// Subscribe to window events and run the main loop.
 pub fn start(mod: []const u8) !void {
-    const events = "[\"window\", \"workspace\", \"shutdown\"]";
-    try socket.write(&subscribe_writer, .subscribe, events);
-    _ = try socket.read(&subscribe_reader);
+    try command.listen("[\"window\", \"workspace\", \"shutdown\"]");
     try arrange();
     while (true) {
-        defer main.fba_state.reset();
         const exited = apply(mod) catch |err| switch (err) {
             error.OutOfMemory,
             error.SyntaxError,

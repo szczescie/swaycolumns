@@ -3,26 +3,12 @@
 const std = @import("std");
 
 const columns = @import("columns.zig");
+const command = @import("command.zig");
+const socket = @import("socket.zig");
 
-var fba_buf: [1024 * 1024]u8 = undefined;
-pub var fba_state = std.heap.FixedBufferAllocator.init(&fba_buf);
-pub const fba = fba_state.allocator();
-
-const Subcommand = enum { start, focus, move, layout, drop, @"-h", @"--help" };
-
-fn stringToSubcommand(string: []const u8) Subcommand {
-    return std.meta.stringToEnum(Subcommand, string) orelse
-        std.process.fatal("{s} is an invalid subcommand", .{string});
-}
-
-fn stringToParameter(comptime T: type, string: []const u8) T {
-    return std.meta.stringToEnum(T, string) orelse
-        std.process.fatal("{s} is an invalid parameter", .{string});
-}
-
-fn help() !void {
+fn help(status: u8) noreturn {
     var stdout_writer = std.fs.File.stdout().writer(&.{});
-    try stdout_writer.interface.writeAll(
+    stdout_writer.interface.writeAll(
         \\Usage: swaycolumns [command] [parameter]
         \\
         \\  start [modifier]    Start the daemon and use the specified floating modifier.
@@ -32,37 +18,55 @@ fn help() !void {
         \\
         \\  -h, --help          Print this message and quit.
         \\
-    );
+    ) catch {};
+    std.process.exit(status);
 }
 
-/// Run the program.
+const Subcommand = enum { start, focus, move, layout, drop, @"-h", @"--help" };
+
+fn stringToSubcommand(subcommand: ?[]const u8) Subcommand {
+    const subcommand_string = subcommand orelse help(1);
+    return std.meta.stringToEnum(Subcommand, subcommand_string) orelse
+        std.process.fatal("{s} is an invalid subcommand", .{subcommand_string});
+}
+
+fn stringToParameter(
+    comptime T: type,
+    subcommand: Subcommand,
+    parameter: ?[]const u8,
+) T {
+    const parameter_string = parameter orelse
+        std.process.fatal("{t} is missing a parameter", .{subcommand});
+    return std.meta.stringToEnum(T, parameter_string) orelse
+        std.process.fatal("{s} is an invalid parameter", .{parameter_string});
+}
+
 pub fn main() !void {
-    try columns.init();
-    defer columns.deinit();
+    socket.init() catch |err| switch (err) {
+        error.SwaysockEnv => {
+            std.process.fatal("SWAYSOCK is not set", .{});
+        },
+        error.SwaysockConnection => {
+            std.process.fatal("unable to connect to socket ({})", .{err});
+        },
+        else => return err,
+    };
+    defer socket.deinit();
     var args = std.process.args();
     _ = args.skip();
-    const subcommand_arg = args.next() orelse
-        std.process.fatal("missing subcommand", .{});
-    switch (stringToSubcommand(subcommand_arg)) {
+    const subcommand = stringToSubcommand(args.next());
+    switch (subcommand) {
         .start => try columns.start(args.next() orelse "super"),
-        .move, .focus, .layout => |subcommand| {
-            const parameter_arg = args.next() orelse std.process.fatal(
-                \\ {s} is missing a parameter
-            , .{subcommand_arg});
-            switch (subcommand) {
-                .focus => try columns.focus(
-                    stringToParameter(columns.FocusTarget, parameter_arg),
-                ),
-                .move => try columns.move(
-                    stringToParameter(columns.MoveDirection, parameter_arg),
-                ),
-                .layout => try columns.layout(
-                    stringToParameter(columns.LayoutMode, parameter_arg),
-                ),
-                else => unreachable,
-            }
-        },
+        .focus => try columns.focus(
+            stringToParameter(command.FocusTarget, subcommand, args.next()),
+        ),
+        .move => try columns.move(
+            stringToParameter(command.MoveDirection, subcommand, args.next()),
+        ),
+        .layout => try columns.layout(
+            stringToParameter(command.LayoutMode, subcommand, args.next()),
+        ),
         .drop => try columns.drop(),
-        .@"-h", .@"--help" => try help(),
+        .@"-h", .@"--help" => help(0),
     }
 }
