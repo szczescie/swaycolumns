@@ -91,15 +91,6 @@ fn tile() !void {
     try command.commit();
 }
 
-fn tileAndDrag(mod: []const u8, event: Event) !void {
-    if (event.container) |container| {
-        if (std.mem.eql(u8, container.type, "floating_con")) {
-            try command.drag(.unset, mod);
-        } else try command.drag(.set, mod);
-    }
-    try tile();
-}
-
 fn reload(mod: []const u8) !void {
     try command.drag(.reset, mod);
     try tile();
@@ -115,7 +106,12 @@ fn apply(mod: []const u8) !bool {
         std.mem.eql(u8, event.change, "close") or
         std.mem.eql(u8, event.change, "floating") or
         std.mem.eql(u8, event.change, "move");
-    if (tree_changed) try tileAndDrag(mod, event);
+    if (!tree_changed) return false;
+    if (event.container) |container|
+        if (std.mem.eql(u8, container.type, "floating_con")) {
+            try command.drag(.unset, mod);
+        } else try command.drag(.set, mod);
+    try tile();
     return false;
 }
 

@@ -4,17 +4,13 @@ const socket = @import("socket.zig");
 const tree = @import("tree.zig");
 
 pub fn swap(con_id: u32) !void {
-    try socket.run.print(
-        \\swap container with con_id {d};
-    , .{con_id});
+    try socket.run.print("swap container with con_id {d};", .{con_id});
 }
 
 pub const MoveDirection = enum { left, right, up, down };
 
 pub fn move(direction: MoveDirection) !void {
-    try socket.run.print(
-        \\move {t};
-    , .{direction});
+    try socket.run.print("move {t};", .{direction});
 }
 
 pub const FocusCurrent = enum { window, column, workspace };
@@ -44,22 +40,20 @@ pub fn focus(focused: FocusCurrent, target: FocusTarget) !void {
 pub const LayoutMode = enum { splitv, stacking, toggle };
 
 pub fn layout(focused: enum { window, column }, mode: LayoutMode) !void {
-    const layout_string =
+    const layout_choice =
         if (mode == .toggle) "toggle splitv stacking" else @tagName(mode);
     switch (focused) {
         .window => try socket.run.print(
             \\layout {s};
-        , .{layout_string}),
+        , .{layout_choice}),
         .column => try socket.run.print(
             \\focus child; layout {s}; focus parent;
-        , .{layout_string}),
+        , .{layout_choice}),
     }
 }
 
-pub const DropAction = enum { move, swap };
-
-pub fn drop(action: DropAction) !void {
-    const action_string =
+pub fn drop(action: enum { move, swap }) !void {
+    const drop_action =
         if (action == .move) "move" else "swap container with";
     // zig fmt: off
     try socket.run.print(
@@ -68,7 +62,7 @@ pub fn drop(action: DropAction) !void {
         ++ \\    unmark _swaycolumns_drag,
         ++ \\    focus;
         ++ \\[con_mark = _swaycolumns_drop] unmark _swaycolumns_drop;
-    , .{action_string});
+    , .{drop_action});
     // zig fmt: on
 }
 
@@ -127,12 +121,8 @@ pub fn columnMultiple(containers: []tree.Node) !void {
     }
 }
 
-fn len() usize {
-    return socket.run.writer.interface.end - 14;
-}
-
 pub fn commit() !void {
-    if (len() == 0) return;
+    if (socket.run.writer.interface.end - 14 == 0) return;
     try socket.run.commit();
     try socket.run.discard();
 }

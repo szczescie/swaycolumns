@@ -3,7 +3,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
-pub const MessageType = enum(u32) { run = 0, subscribe = 2, tree = 4 };
+const MessageType = enum(u32) { run = 0, subscribe = 2, tree = 4 };
 
 const Socket = struct {
     message_type: MessageType,
@@ -11,13 +11,6 @@ const Socket = struct {
     read_buffer: []u8 = undefined,
     writer: std.net.Stream.Writer,
     reader: std.net.Stream.Reader,
-
-    fn connect() !std.net.Stream {
-        const socket_path = std.posix.getenv("SWAYSOCK") orelse
-            return error.SwaysockEnv;
-        return std.net.connectUnixSocket(socket_path) catch
-            return error.SwaysockConnection;
-    }
 
     fn writeHeader(socket: *@This()) !void {
         const header: [14]u8 = .{ 'i', '3', '-', 'i', 'p', 'c', 0, 0, 0, 0 } ++
@@ -32,7 +25,10 @@ const Socket = struct {
     ) !@This() {
         std.debug.assert(write_buffer.len > 0);
         std.debug.assert(read_buffer.len > 0);
-        const stream = try connect();
+        const socket_path = std.posix.getenv("SWAYSOCK") orelse
+            return error.SwaysockEnv;
+        const stream = std.net.connectUnixSocket(socket_path) catch
+            return error.SwaysockConnection;
         var socket: @This() = .{
             .message_type = message_type,
             .write_buffer = write_buffer,
