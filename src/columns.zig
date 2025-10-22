@@ -70,8 +70,7 @@ pub fn drop() !void {
         if (drag_column == drop_column) {
             try command.drop(.swap);
             break;
-        }
-        return;
+        } else return;
     } else try command.drop(.move);
     try command.commit();
 }
@@ -80,16 +79,14 @@ const Event = struct { change: []const u8, container: ?tree.Node = null };
 
 fn tile() !void {
     for (try tree.workspaceAll()) |workspace| {
+        const mode = workspace.layout;
         const columns = workspace.nodes;
-        if (columns.len == 1 and columns[0].nodes.len == 1) {
-            try command.columnNone(columns);
-            continue;
-        }
-        if (columns.len >= 1 and std.mem.eql(u8, workspace.layout, "splitv")) {
-            try command.columnSingle(columns);
-            continue;
-        }
-        try command.columnMultiple(columns);
+        if (columns.len == 1 and columns[0].nodes.len == 1)
+            try command.columnNone(columns)
+        else if (columns.len >= 1 and std.mem.eql(u8, mode, "splitv"))
+            try command.columnSingle(columns)
+        else
+            try command.columnMultiple(columns);
     }
     try command.commit();
 }
