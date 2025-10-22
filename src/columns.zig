@@ -50,10 +50,8 @@ pub fn layout(mode: command.LayoutMode) !void {
     for (workspace.nodes) |column| {
         if (!column.focused) continue;
         try command.layout(.column, mode);
-        try command.commit();
-        return;
-    }
-    try command.layout(.window, mode);
+        break;
+    } else try command.layout(.window, mode);
     try command.commit();
 }
 
@@ -61,80 +59,72 @@ pub fn drop() !void {
     for ((try tree.workspaceFocused()).nodes) |column| {
         const drag_column = inner: for (column.nodes) |window| {
             for (window.marks) |mark|
-                if (std.mem.eql(u8, mark, "swaycolumns_drag"))
+                if (std.mem.eql(u8, mark, "_swaycolumns_drag"))
                     break :inner column.id;
         } else continue;
         const drop_column = inner: for (column.nodes) |window| {
             for (window.marks) |mark|
-                if (std.mem.eql(u8, mark, "swaycolumns_drop"))
+                if (std.mem.eql(u8, mark, "_swaycolumns_drop"))
                     break :inner column.id;
         } else continue;
         if (drag_column == drop_column) {
             try command.drop(.swap);
-            try command.commit();
+            break;
         }
         return;
-    }
-    try command.drop(.move);
+    } else try command.drop(.move);
     try command.commit();
 }
 
 const Event = struct { change: []const u8, container: ?tree.Node = null };
-var drag_bindsym = false;
 
-fn drag(mod: []const u8, event: Event) !void {
-    const container = event.container orelse return;
-    if (std.mem.eql(u8, container.type, "floating_con")) {
-        if (drag_bindsym) {
-            try command.drag(.unbindsym, mod);
-            try command.commit();
-            drag_bindsym = false;
-        }
-        return;
-    }
-    if (!drag_bindsym) {
-        try command.drag(.bindsym, mod);
-        try command.commit();
-        drag_bindsym = true;
-    }
-}
-
-pub fn arrange() !void {
+fn tile() !void {
     for (try tree.workspaceAll()) |workspace| {
         const columns = workspace.nodes;
         if (columns.len == 1 and columns[0].nodes.len == 1) {
-            try command.uncolumnise(columns);
+            try command.columnNone(columns);
             continue;
         }
         if (columns.len >= 1 and std.mem.eql(u8, workspace.layout, "splitv")) {
-            try command.fixColumns(columns);
+            try command.columnSingle(columns);
             continue;
         }
-        try command.columnise(columns);
+        try command.columnMultiple(columns);
     }
-    if (command.len() > 14) try command.commit();
+    try command.commit();
+}
+
+fn tileAndDrag(mod: []const u8, event: Event) !void {
+    if (event.container) |container| {
+        if (std.mem.eql(u8, container.type, "floating_con")) {
+            try command.drag(.unset, mod);
+        } else try command.drag(.set, mod);
+    }
+    try tile();
+}
+
+fn reload(mod: []const u8) !void {
+    try command.drag(.reset, mod);
+    try tile();
 }
 
 fn apply(mod: []const u8) !bool {
     const event = try command.parse(Event);
     if (std.mem.eql(u8, event.change, "exit")) return true;
-    if (std.mem.eql(u8, event.change, "reload")) drag_bindsym = false;
+    if (std.mem.eql(u8, event.change, "reload")) try reload(mod);
     const tree_changed =
         std.mem.eql(u8, event.change, "focus") or
         std.mem.eql(u8, event.change, "new") or
         std.mem.eql(u8, event.change, "close") or
         std.mem.eql(u8, event.change, "floating") or
         std.mem.eql(u8, event.change, "move");
-    if (tree_changed) {
-        try drag(mod, event);
-        try arrange();
-    }
+    if (tree_changed) try tileAndDrag(mod, event);
     return false;
 }
 
 pub fn start(mod: []const u8) !void {
     try command.listen("[\"window\", \"workspace\", \"shutdown\"]");
-    try arrange();
+    try reload(mod);
     while (true) {
         const exited = apply(mod) catch |err| switch (err) {
             error.OutOfMemory,

@@ -17,8 +17,8 @@ pub fn move(direction: MoveDirection) !void {
     , .{direction});
 }
 
-pub const FocusTarget = enum { window, column, workspace, toggle };
 pub const FocusCurrent = enum { window, column, workspace };
+pub const FocusTarget = enum { window, column, workspace, toggle };
 
 pub fn focus(focused: FocusCurrent, target: FocusTarget) !void {
     const payload = switch (focused) {
@@ -63,42 +63,46 @@ pub fn drop(action: DropAction) !void {
         if (action == .move) "move" else "swap container with";
     // zig fmt: off
     try socket.run.print(
-        \\[con_mark = swaycolumns_drag]
-        ++ \\    {s} mark swaycolumns_drop,
-        ++ \\    unmark swaycolumns_drag,
+        \\[con_mark = _swaycolumns_drag]
+        ++ \\    {s} mark _swaycolumns_drop,
+        ++ \\    unmark _swaycolumns_drag,
         ++ \\    focus;
-        ++ \\[con_mark = swaycolumns_drop] unmark swaycolumns_drop;
+        ++ \\[con_mark = _swaycolumns_drop] unmark _swaycolumns_drop;
     , .{action_string});
     // zig fmt: on
 }
 
-const BindState = enum { bindsym, unbindsym };
+const BindsymState = enum { set, unset, reset };
+var previous_state: BindsymState = .unset;
 
-pub fn drag(state: BindState, mod: []const u8) !void {
-    switch (state) {
-        // zig fmt: off
-        .bindsym => try socket.run.print(
-            \\bindsym --whole-window {0s}+button1 mark --add swaycolumns_drag;
-            \\bindsym --whole-window --release {0s}+button1 "
-            ++ \\    mark --add swaycolumns_drop;
-            ++ \\    exec swaycolumns drop;
-            ++ \\"
-        , .{mod}),
-        // zig fmt: on
-        .unbindsym => try socket.run.print(
+pub fn drag(state: BindsymState, mod: []const u8) !void {
+    if (state == .unset and previous_state != .unset) {
+        try socket.run.print(
             \\unbindsym --whole-window {0s}+button1;
             \\unbindsym --whole-window --release {0s}+button1;
-        , .{mod}),
+        , .{mod});
+        previous_state = .unset;
+    } else if (state == .set and previous_state != .set or state == .reset) {
+        // zig fmt: off
+        try socket.run.print(
+            \\bindsym --whole-window {0s}+button1 mark --add _swaycolumns_drag;
+            \\bindsym --whole-window --release {0s}+button1 "
+            ++ \\    mark --add _swaycolumns_drop;
+            ++ \\    exec swaycolumns drop;
+            ++ \\"
+        , .{mod});
+        // zig fmt: on
+        previous_state = .set;
     }
 }
 
-pub fn uncolumnise(containers: []tree.Node) !void {
+pub fn columnNone(containers: []tree.Node) !void {
     try socket.run.print(
         \\[con_id={d}] split n;
     , .{containers[0].nodes[0].id});
 }
 
-pub fn fixColumns(containers: []tree.Node) !void {
+pub fn columnSingle(containers: []tree.Node) !void {
     try socket.run.print(
         \\[con_id={d}] move right, move left;
     , .{containers[0].id});
@@ -108,7 +112,7 @@ pub fn fixColumns(containers: []tree.Node) !void {
         , .{containers[0].id});
 }
 
-pub fn columnise(containers: []tree.Node) !void {
+pub fn columnMultiple(containers: []tree.Node) !void {
     for (containers) |column| {
         if (containers.len >= 2 and std.mem.eql(u8, column.layout, "none"))
             try socket.run.print(
@@ -123,7 +127,12 @@ pub fn columnise(containers: []tree.Node) !void {
     }
 }
 
+fn len() usize {
+    return socket.run.writer.interface.end - 14;
+}
+
 pub fn commit() !void {
+    if (len() == 0) return;
     try socket.run.commit();
     try socket.run.discard();
 }
@@ -136,8 +145,4 @@ pub fn listen(events: []const u8) !void {
 
 pub fn parse(T: type) !T {
     return try socket.subscribe.parse(T);
-}
-
-pub fn len() usize {
-    return socket.run.writer.interface.end - 14;
 }
