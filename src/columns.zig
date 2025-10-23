@@ -91,12 +91,12 @@ fn tile() !void {
     try command.commit();
 }
 
-fn reload(mod: []const u8) !void {
+fn reload(mod: command.Modifier) !void {
     try command.drag(.reset, mod);
     try tile();
 }
 
-fn apply(mod: []const u8) !bool {
+fn apply(mod: command.Modifier) !bool {
     const event = try command.parse(Event);
     if (std.mem.eql(u8, event.change, "exit")) return true;
     if (std.mem.eql(u8, event.change, "reload")) try reload(mod);
@@ -115,7 +115,7 @@ fn apply(mod: []const u8) !bool {
     return false;
 }
 
-pub fn start(mod: []const u8) !void {
+pub fn start(mod: command.Modifier) !void {
     try command.listen("[\"window\", \"workspace\", \"shutdown\"]");
     try reload(mod);
     while (true) {

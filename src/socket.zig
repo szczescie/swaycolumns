@@ -3,6 +3,8 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
+const main = @import("main.zig");
+
 const MessageType = enum(u32) { run = 0, subscribe = 2, tree = 4 };
 
 const Socket = struct {
@@ -50,10 +52,10 @@ const Socket = struct {
 
     pub fn print(
         socket: *@This(),
-        comptime fmt: []const u8,
+        comptime format: []const u8,
         args: anytype,
     ) !void {
-        try socket.writer.interface.print(fmt, args);
+        try socket.writer.interface.print(format, args);
     }
 
     pub fn commit(socket: *@This()) !void {
@@ -76,13 +78,10 @@ const Socket = struct {
     }
 
     pub fn parse(socket: *@This(), comptime T: type) !T {
-        var fba_buf: [64 * 1024]u8 = undefined;
-        var fba_state = std.heap.FixedBufferAllocator.init(&fba_buf);
-        const fba = fba_state.allocator();
         const length = try socket.len();
         const payload = try socket.reader.interface().peek(length);
         defer socket.reader.interface().toss(length);
-        return std.json.parseFromSliceLeaky(T, fba, payload, .{
+        return std.json.parseFromSliceLeaky(T, main.fba, payload, .{
             .ignore_unknown_fields = true,
             .allocate = .alloc_if_needed,
         });

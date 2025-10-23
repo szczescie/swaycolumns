@@ -10,7 +10,7 @@
 ❯ swaycolumns --help
 Usage: swaycolumns [command] [parameter]
 
-  start [modifier]    Start the daemon and use the specified floating modifier.
+  start [modifier]    Start the daemon and set a floating modifier.
   move <direction>    Move windows or swap columns.
   focus <target>      Focus window, column or workspace.
   layout <mode>       Switch column layout to splitv or stacking.
