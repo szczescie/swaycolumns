@@ -47,7 +47,10 @@ fn stringToParameter(T: type, subcommand: Subcommand, arg_2: ?[]const u8) T {
 fn socketFailed(err: anyerror) noreturn {
     switch (err) {
         error.SwaysockEnv => std.process.fatal("SWAYSOCK is not set", .{}),
-        else => std.process.fatal("unable to connect to socket ({})", .{err}),
+        error.SwaysockConnection => {
+            std.process.fatal("unable to connect to socket ({})", .{err});
+        },
+        else => std.process.fatal("unable to write to socket ({})", .{err}),
     }
 }
 
