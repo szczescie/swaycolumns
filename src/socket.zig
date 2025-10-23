@@ -103,9 +103,7 @@ const Socket = struct {
         var header: [14]u8 = undefined;
         try socket.reader.interface().readSliceAll(&header);
         const endian = builtin.target.cpu.arch.endian();
-        const length = std.mem.readInt(u32, header[6..10], endian);
-        std.debug.assert(length > 0);
-        return length;
+        return std.mem.readInt(u32, header[6..10], endian);
     }
 
     pub fn discard(socket: *Socket) !void {
@@ -124,9 +122,6 @@ const Socket = struct {
         return std.json.parseFromSliceLeaky(T, main.fba, payload, .{
             .ignore_unknown_fields = true,
             .allocate = .alloc_if_needed,
-        }) catch |err| switch (err) {
-            error.OutOfMemory => return err,
-            else => unreachable,
-        };
+        });
     }
 };
