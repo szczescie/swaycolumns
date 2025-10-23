@@ -3,6 +3,7 @@
 const std = @import("std");
 
 const command = @import("command.zig");
+const main = @import("main.zig");
 const tree = @import("tree.zig");
 
 pub fn move(direction: command.MoveDirection) !void {
@@ -75,8 +76,6 @@ pub fn drop() !void {
     try command.commit();
 }
 
-const Event = struct { change: []const u8, container: ?tree.Node = null };
-
 fn tile() !void {
     for (try tree.workspaceAll()) |workspace| {
         const mode = workspace.layout;
@@ -91,35 +90,38 @@ fn tile() !void {
     try command.commit();
 }
 
-fn reload(mod: command.Modifier) !void {
-    try command.drag(.reset, mod);
+fn reload(mod_or_null: ?command.Modifier) !void {
+    if (mod_or_null) |mod| try command.drag(mod, .reset);
     try tile();
 }
 
-fn apply(mod: command.Modifier) !bool {
+const Event = struct { change: []const u8, container: ?tree.Node = null };
+
+fn apply(mod_or_null: ?command.Modifier) !bool {
     const event = try command.parse(Event);
     if (std.mem.eql(u8, event.change, "exit")) return true;
-    if (std.mem.eql(u8, event.change, "reload")) try reload(mod);
-    const tree_changed =
+    if (std.mem.eql(u8, event.change, "reload")) try reload(mod_or_null);
+    const focus_change =
         std.mem.eql(u8, event.change, "focus") or
-        std.mem.eql(u8, event.change, "new") or
-        std.mem.eql(u8, event.change, "close") or
-        std.mem.eql(u8, event.change, "floating") or
-        std.mem.eql(u8, event.change, "move");
-    if (!tree_changed) return false;
-    if (event.container) |container|
-        if (std.mem.eql(u8, container.type, "floating_con")) {
-            try command.drag(.unset, mod);
-        } else try command.drag(.set, mod);
+        std.mem.eql(u8, event.change, "floating");
+    if (!focus_change and
+        !std.mem.eql(u8, event.change, "new") and
+        !std.mem.eql(u8, event.change, "close") and
+        !std.mem.eql(u8, event.change, "move")) return false;
+    if (mod_or_null) |mod| if (event.container) |container| if (focus_change) {
+        const floating_con = std.mem.eql(u8, container.type, "floating_con");
+        try command.drag(mod, if (floating_con) .unset else .set);
+    };
     try tile();
     return false;
 }
 
-pub fn start(mod: command.Modifier) !void {
+pub fn start(mod_or_null: ?command.Modifier) !void {
     try command.listen("[\"window\", \"workspace\", \"shutdown\"]");
-    try reload(mod);
+    try reload(mod_or_null);
     while (true) {
-        const exited = apply(mod) catch |err| switch (err) {
+        defer main.fba_state.reset();
+        const exited = apply(mod_or_null) catch |err| switch (err) {
             error.OutOfMemory,
             error.SyntaxError,
             error.UnexpectedEndOfInput,

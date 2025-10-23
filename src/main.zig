@@ -7,7 +7,7 @@ const command = @import("command.zig");
 const socket = @import("socket.zig");
 
 var fba_buf: [64 * 1024]u8 = undefined;
-var fba_state = std.heap.FixedBufferAllocator.init(&fba_buf);
+pub var fba_state = std.heap.FixedBufferAllocator.init(&fba_buf);
 pub const fba = fba_state.allocator();
 
 fn help(status: u8) noreturn {
@@ -28,8 +28,8 @@ fn help(status: u8) noreturn {
 
 const Subcommand = enum { start, focus, move, layout, drop, @"-h", @"--help" };
 
-fn stringToSubcommand(subcommand: ?[]const u8) Subcommand {
-    const subcommand_string = subcommand orelse help(1);
+fn stringToSubcommand(arg_1: ?[]const u8) Subcommand {
+    const subcommand_string = arg_1 orelse help(1);
     return std.meta.stringToEnum(Subcommand, subcommand_string) orelse
         std.process.fatal("{s} is an invalid subcommand", .{subcommand_string});
 }
@@ -53,12 +53,12 @@ pub fn main() !void {
     var args = std.process.args();
     _ = args.skip();
     switch (stringToSubcommand(args.next() orelse help(1))) {
-        .start => try columns.start(
-            stringToParameter(command.Modifier, .start, if (args.next()) |mod|
-                try std.ascii.allocLowerString(fba, mod)
-            else
-                "super"),
-        ),
+        .start => if (args.next()) |arg_2| {
+            const mod = try std.ascii.allocLowerString(fba, arg_2);
+            try columns.start(
+                stringToParameter(command.Modifier, .start, mod),
+            );
+        } else try columns.start(null),
         .focus => try columns.focus(
             stringToParameter(command.FocusTarget, .focus, args.next()),
         ),

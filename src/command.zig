@@ -71,29 +71,26 @@ pub fn drop(action: enum { move, swap }) !void {
     }
 }
 
-const BindsymState = enum { set, unset, reset };
-var previous_state: BindsymState = .unset;
-pub const Modifier = enum { super, mod4, alt, mod1, none };
+pub const Modifier = enum { super, mod4, alt, mod1 };
+const HotkeyState = enum { set, unset, reset };
+var previous_state: HotkeyState = .unset;
 
-fn dragInner(state: BindsymState, comptime mod: Modifier) !void {
-    const hotkey = @tagName(mod) ++ "+button1 ";
-    if (state == .unset and previous_state != .unset) {
-        try socket.run.write("unbindsym --whole-window " ++ hotkey ++ ";" ++
-            "unbindsym --whole-window --release " ++ hotkey ++ ";");
-        previous_state = .unset;
-    } else if ((state == .set and previous_state != .set) or state == .reset) {
-        try socket.run.write("bindsym --whole-window " ++ hotkey ++
-            "mark --add _swaycolumns_drag;" ++
-            "bindsym --whole-window --release " ++ hotkey ++
-            "'mark --add _swaycolumns_drop; exec swaycolumns drop';");
-        previous_state = .set;
-    }
-}
-
-pub inline fn drag(state: BindsymState, mod: Modifier) !void {
+pub fn drag(mod: Modifier, state: HotkeyState) !void {
+    if (state == previous_state) return;
     switch (mod) {
-        .none => return,
-        inline else => |mod_inline| try dragInner(state, mod_inline),
+        inline else => |mod_inline| {
+            const hotkey = @tagName(mod_inline) ++ "+button1 ";
+            const unset =
+                "unbindsym --whole-window " ++ hotkey ++ ";" ++
+                "unbindsym --whole-window --release " ++ hotkey ++ ";";
+            const set =
+                "bindsym --whole-window " ++ hotkey ++
+                "mark --add _swaycolumns_drag;" ++
+                "bindsym --whole-window --release " ++ hotkey ++
+                "'mark --add _swaycolumns_drop; exec swaycolumns drop';";
+            try socket.run.write(if (state == .unset) unset else set);
+            previous_state = if (state == .unset) .unset else .set;
+        },
     }
 }
 

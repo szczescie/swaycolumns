@@ -32,7 +32,7 @@ bindsym {
 }
 
 exec {
-    swaycolumns start
+    swaycolumns start super
 }
 ```
 
