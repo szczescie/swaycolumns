@@ -90,6 +90,7 @@ fn tile() !void {
 }
 
 inline fn reload(mod_or_null: ?command.Modifier) !void {
+    @branchHint(.unlikely);
     if (mod_or_null) |mod| try command.drag(mod, .reset);
     try tile();
 }
@@ -99,7 +100,6 @@ const Event = struct { change: []const u8, container: ?tree.Node = null };
 fn apply(mod_or_null: ?command.Modifier) !bool {
     defer main.fba_state.reset();
     const event = try command.parse(Event);
-    if (std.mem.eql(u8, event.change, "exit")) return false;
     if (std.mem.eql(u8, event.change, "reload")) try reload(mod_or_null);
     const focus_change =
         std.mem.eql(u8, event.change, "focus") or
