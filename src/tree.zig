@@ -24,8 +24,8 @@ fn containsFocused(node: Node) bool {
     if (node.focused) return true;
     for (node.nodes) |node_inner|
         if (containsFocused(node_inner)) return true;
-    for (node.floating_nodes) |node_inner|
-        if (containsFocused(node_inner)) return true;
+    for (node.floating_nodes) |floating_node_inner|
+        if (containsFocused(floating_node_inner)) return true;
     return false;
 }
 

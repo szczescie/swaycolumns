@@ -43,8 +43,9 @@ pub fn focus(focused: FocusCurrent, target: FocusTarget) !void {
 
 pub const LayoutMode = enum { splitv, stacking, toggle };
 
-pub fn layout(focused: enum { window, column }, mode: LayoutMode) !void {
+pub fn layout(focused: FocusCurrent, mode: LayoutMode) !void {
     switch (focused) {
+        .workspace => unreachable,
         inline else => |focused_inline| switch (mode) {
             inline else => |mode_inline| try socket.run.write(comptime block: {
                 var payload: []const u8 = switch (mode_inline) {
@@ -59,7 +60,9 @@ pub fn layout(focused: enum { window, column }, mode: LayoutMode) !void {
     }
 }
 
-pub fn drop(action: enum { move, swap }) !void {
+pub const DropAction = enum { move, swap };
+
+pub fn drop(action: DropAction) !void {
     switch (action) {
         inline else => |action_inline| try socket.run.write(
             "[con_mark = _swaycolumns_drag]" ++ switch (action_inline) {
@@ -76,7 +79,11 @@ const HotkeyState = enum { set, unset, reset };
 var previous_state: HotkeyState = .unset;
 
 pub fn drag(mod: Modifier, state: HotkeyState) !void {
-    if (state == previous_state) return;
+    std.debug.assert(previous_state != .reset);
+    if (state == previous_state) {
+        @branchHint(.likely);
+        return;
+    }
     switch (mod) {
         inline else => |mod_inline| {
             const hotkey = @tagName(mod_inline) ++ "+button1 ";
@@ -88,8 +95,10 @@ pub fn drag(mod: Modifier, state: HotkeyState) !void {
                 "mark --add _swaycolumns_drag;" ++
                 "bindsym --whole-window --release " ++ hotkey ++
                 "'mark --add _swaycolumns_drop; exec swaycolumns drop';";
-            try socket.run.write(if (state == .unset) unset else set);
-            previous_state = if (state == .unset) .unset else .set;
+            const payload, const current_state: HotkeyState =
+                if (state == .unset) .{ unset, .unset } else .{ set, .set };
+            try socket.run.write(payload);
+            previous_state = current_state;
         },
     }
 }
@@ -102,11 +111,12 @@ pub fn columnNone(containers: []tree.Node) !void {
 pub fn columnSingle(containers: []tree.Node) !void {
     const column = containers[0];
     try socket.run.print("[con_id = {}] move right, move left;", .{column.id});
-    for (0..containers[0].nodes.len) |_|
+    for (0..column.nodes.len) |_|
         try socket.run.print("[con_id = {}] move up;", .{column.id});
 }
 
 pub fn columnMultiple(containers: []tree.Node) !void {
+    @branchHint(.likely);
     for (containers) |column| {
         if (containers.len >= 2 and std.mem.eql(u8, column.layout, "none"))
             try socket.run.print("[con_id = {}] split v;", .{column.id});

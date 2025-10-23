@@ -10,9 +10,12 @@ var fba_buf: [64 * 1024]u8 = undefined;
 pub var fba_state = std.heap.FixedBufferAllocator.init(&fba_buf);
 pub const fba = fba_state.allocator();
 
+var stdout_writer = std.fs.File.stdout().writer(&.{});
+const stdout = &stdout_writer.interface;
+
 fn help(status: u8) noreturn {
-    var stdout_writer = std.fs.File.stdout().writer(&.{});
-    stdout_writer.interface.writeAll(
+    @branchHint(.unlikely);
+    stdout.writeAll(
         \\Usage: swaycolumns [command] [parameter]
         \\
         \\  start [modifier]    Start the daemon and set a floating modifier.
@@ -29,41 +32,53 @@ fn help(status: u8) noreturn {
 const Subcommand = enum { start, focus, move, layout, drop, @"-h", @"--help" };
 
 fn stringToSubcommand(arg_1: ?[]const u8) Subcommand {
-    const subcommand_string = arg_1 orelse help(1);
-    return std.meta.stringToEnum(Subcommand, subcommand_string) orelse
-        std.process.fatal("{s} is an invalid subcommand", .{subcommand_string});
+    const subcommand = arg_1 orelse help(1);
+    return std.meta.stringToEnum(Subcommand, subcommand) orelse
+        std.process.fatal("{s} is an invalid subcommand", .{subcommand});
 }
 
 fn stringToParameter(T: type, subcommand: Subcommand, arg_2: ?[]const u8) T {
-    const parameter_string = arg_2 orelse
+    const parameter = arg_2 orelse
         std.process.fatal("{t} is missing a parameter", .{subcommand});
-    return std.meta.stringToEnum(T, parameter_string) orelse
-        std.process.fatal("{s} is an invalid parameter", .{parameter_string});
+    return std.meta.stringToEnum(T, parameter) orelse
+        std.process.fatal("{s} is an invalid parameter", .{parameter});
+}
+
+fn socketFailed(err: anyerror) noreturn {
+    switch (err) {
+        error.SwaysockEnv => std.process.fatal("SWAYSOCK is not set", .{}),
+        else => std.process.fatal("unable to connect to socket ({})", .{err}),
+    }
+}
+
+fn start(arg_2: ?[]const u8) !noreturn {
+    const mod_or_null: ?command.Modifier = if (arg_2) |mod| block: {
+        const mod_lower = try std.ascii.allocLowerString(fba, mod);
+        break :block stringToParameter(command.Modifier, .start, mod_lower);
+    } else null;
+    while (true) columns.start(mod_or_null) catch |columns_err| {
+        @branchHint(.cold);
+        std.log.debug("{}", .{columns_err});
+        socket.deinit();
+        std.Thread.sleep(1 * std.time.ns_per_s);
+        socket.init() catch |socket_err| socketFailed(socket_err);
+        std.Thread.sleep(1 * std.time.ns_per_s);
+        continue;
+    };
 }
 
 pub fn main() !void {
-    socket.init() catch |err| switch (err) {
-        error.SwaysockEnv => std.process.fatal("SWAYSOCK is not set", .{}),
-        error.SwaysockConnection => {
-            std.process.fatal("unable to connect to socket ({})", .{err});
-        },
-        else => return err,
-    };
+    socket.init() catch |err| socketFailed(err);
     defer socket.deinit();
     var args = std.process.args();
     _ = args.skip();
     switch (stringToSubcommand(args.next() orelse help(1))) {
-        .start => if (args.next()) |arg_2| {
-            const mod = try std.ascii.allocLowerString(fba, arg_2);
-            try columns.start(
-                stringToParameter(command.Modifier, .start, mod),
-            );
-        } else try columns.start(null),
-        .focus => try columns.focus(
-            stringToParameter(command.FocusTarget, .focus, args.next()),
-        ),
+        .start => try start(args.next()),
         .move => try columns.move(
             stringToParameter(command.MoveDirection, .move, args.next()),
+        ),
+        .focus => try columns.focus(
+            stringToParameter(command.FocusTarget, .focus, args.next()),
         ),
         .layout => try columns.layout(
             stringToParameter(command.LayoutMode, .layout, args.next()),

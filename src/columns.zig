@@ -4,9 +4,11 @@ const std = @import("std");
 
 const command = @import("command.zig");
 const main = @import("main.zig");
+const socket = @import("socket.zig");
 const tree = @import("tree.zig");
 
 pub fn move(direction: command.MoveDirection) !void {
+    @branchHint(.likely);
     const columns = (try tree.workspaceFocused()).nodes;
     for (columns, 0..) |column, column_index| {
         if (!column.focused) continue;
@@ -14,10 +16,8 @@ pub fn move(direction: command.MoveDirection) !void {
             try command.swap(columns[column_index - 1].id)
         else if (direction == .right and column_index < columns.len - 1)
             try command.swap(columns[column_index + 1].id);
-        try command.commit();
-        return;
-    }
-    for (columns, 0..) |column, column_index|
+        break;
+    } else for (columns, 0..) |column, column_index|
         for (column.nodes, 0..) |window, window_index| {
             if (!window.focused) continue;
             if (direction == .up and window_index == 0) continue;
@@ -26,9 +26,9 @@ pub fn move(direction: command.MoveDirection) !void {
             try command.move(direction);
             if (direction == .right and
                 column_index != columns.len - 1) try command.move(.down);
-            try command.commit();
-            return;
+            break;
         };
+    try command.commit();
 }
 
 pub fn focus(target: command.FocusTarget) !void {
@@ -48,35 +48,34 @@ pub fn focus(target: command.FocusTarget) !void {
 pub fn layout(mode: command.LayoutMode) !void {
     const workspace = try tree.workspaceFocused();
     if (workspace.focused) return;
-    for (workspace.nodes) |column| {
-        if (!column.focused) continue;
-        try command.layout(.column, mode);
-        break;
-    } else try command.layout(.window, mode);
+    const focused: command.FocusCurrent = for (workspace.nodes) |column| {
+        if (column.focused) break .column;
+    } else .window;
+    try command.layout(focused, mode);
     try command.commit();
 }
 
 pub fn drop() !void {
-    for ((try tree.workspaceFocused()).nodes) |column| {
-        const drag_column = inner: for (column.nodes) |window| {
-            for (window.marks) |mark|
-                if (std.mem.eql(u8, mark, "_swaycolumns_drag"))
-                    break :inner column.id;
-        } else continue;
-        const drop_column = inner: for (column.nodes) |window| {
-            for (window.marks) |mark|
-                if (std.mem.eql(u8, mark, "_swaycolumns_drop"))
-                    break :inner column.id;
-        } else continue;
-        if (drag_column == drop_column) {
-            try command.drop(.swap);
-            break;
-        } else return;
-    } else try command.drop(.move);
+    const action: command.DropAction =
+        outer: for ((try tree.workspaceFocused()).nodes) |column| {
+            const drag_column = inner: for (column.nodes) |window| {
+                for (window.marks) |mark|
+                    if (std.mem.eql(u8, mark, "_swaycolumns_drag"))
+                        break :inner column.id;
+            } else continue;
+            const drop_column = inner: for (column.nodes) |window| {
+                for (window.marks) |mark|
+                    if (std.mem.eql(u8, mark, "_swaycolumns_drop"))
+                        break :inner column.id;
+            } else continue;
+            if (drag_column == drop_column) break :outer .swap else return;
+        } else .move;
+    try command.drop(action);
     try command.commit();
 }
 
 fn tile() !void {
+    @branchHint(.likely);
     for (try tree.workspaceAll()) |workspace| {
         const mode = workspace.layout;
         const columns = workspace.nodes;
@@ -90,7 +89,7 @@ fn tile() !void {
     try command.commit();
 }
 
-fn reload(mod_or_null: ?command.Modifier) !void {
+inline fn reload(mod_or_null: ?command.Modifier) !void {
     if (mod_or_null) |mod| try command.drag(mod, .reset);
     try tile();
 }
@@ -98,8 +97,9 @@ fn reload(mod_or_null: ?command.Modifier) !void {
 const Event = struct { change: []const u8, container: ?tree.Node = null };
 
 fn apply(mod_or_null: ?command.Modifier) !bool {
+    defer main.fba_state.reset();
     const event = try command.parse(Event);
-    if (std.mem.eql(u8, event.change, "exit")) return true;
+    if (std.mem.eql(u8, event.change, "exit")) return false;
     if (std.mem.eql(u8, event.change, "reload")) try reload(mod_or_null);
     const focus_change =
         std.mem.eql(u8, event.change, "focus") or
@@ -107,32 +107,17 @@ fn apply(mod_or_null: ?command.Modifier) !bool {
     if (!focus_change and
         !std.mem.eql(u8, event.change, "new") and
         !std.mem.eql(u8, event.change, "close") and
-        !std.mem.eql(u8, event.change, "move")) return false;
+        !std.mem.eql(u8, event.change, "move")) return true;
     if (mod_or_null) |mod| if (event.container) |container| if (focus_change) {
         const floating_con = std.mem.eql(u8, container.type, "floating_con");
         try command.drag(mod, if (floating_con) .unset else .set);
     };
     try tile();
-    return false;
+    return true;
 }
 
 pub fn start(mod_or_null: ?command.Modifier) !void {
     try command.listen("[\"window\", \"workspace\", \"shutdown\"]");
     try reload(mod_or_null);
-    while (true) {
-        defer main.fba_state.reset();
-        const exited = apply(mod_or_null) catch |err| switch (err) {
-            error.OutOfMemory,
-            error.SyntaxError,
-            error.UnexpectedEndOfInput,
-            error.WorkspaceNotFound,
-            => {
-                std.log.debug("{}", .{err});
-                std.Thread.sleep(1 * std.time.ns_per_s);
-                continue;
-            },
-            else => return err,
-        };
-        if (exited) return;
-    }
+    while (try apply(mod_or_null)) {}
 }
