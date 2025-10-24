@@ -17,17 +17,19 @@ pub fn move(direction: MoveDirection) !void {
     }
 }
 
-pub const FocusCurrent = enum { window, column, workspace };
-pub const FocusTarget = enum { window, column, workspace, toggle };
+pub const FocusCurrent =
+    enum { window, column, workspace, float, float_window, float_column };
+pub const FocusTarget =
+    enum { window, column, workspace, toggle };
 
 pub fn focus(focused: FocusCurrent, target: FocusTarget) !void {
-    const payload = switch (focused) {
-        .window => switch (target) {
+    try socket.run.write(switch (focused) {
+        .window, .float_window => switch (target) {
             .window => return,
             .column, .toggle => "focus parent;",
             .workspace => "focus parent; focus parent;",
         },
-        .column => switch (target) {
+        .column, .float_column => switch (target) {
             .window => "focus child;",
             .column => return,
             .workspace, .toggle => "focus parent;",
@@ -37,25 +39,43 @@ pub fn focus(focused: FocusCurrent, target: FocusTarget) !void {
             .column => "focus child;",
             .workspace => return,
         },
-    };
-    try socket.run.write(payload);
+        .float => switch (target) {
+            .window, .column => return,
+            .workspace, .toggle => "focus parent;",
+        },
+    });
 }
 
 pub const LayoutMode = enum { splitv, stacking, toggle };
 
 pub fn layout(focused: FocusCurrent, mode: LayoutMode) !void {
-    switch (focused) {
-        .workspace => unreachable,
-        inline else => |focused_inline| switch (mode) {
-            inline else => |mode_inline| try socket.run.write(comptime block: {
-                var payload: []const u8 = switch (mode_inline) {
-                    .toggle => "layout toggle splitv stacking;",
-                    else => "layout " ++ @tagName(mode_inline) ++ ";",
-                };
-                if (focused_inline == .column)
-                    payload = "focus child;" ++ payload ++ "focus parent;";
-                break :block payload;
-            }),
+    switch (mode) {
+        inline else => |mode_inline| {
+            const toggle = "layout toggle splitv stacking;";
+            const set = "layout " ++ @tagName(mode_inline) ++ ";";
+            try socket.run.write(switch (focused) {
+                .window => switch (mode_inline) {
+                    .toggle => toggle,
+                    else => set,
+                },
+                .column => switch (mode_inline) {
+                    .toggle => "focus child;" ++ toggle ++ "focus parent;",
+                    else => "focus child;" ++ set ++ "focus parent;",
+                },
+                .float => switch (mode_inline) {
+                    .toggle => "split v; " ++ toggle,
+                    else => "split v; " ++ set,
+                },
+                .float_window => switch (mode_inline) {
+                    .toggle, .splitv => "split n;",
+                    .stacking => return,
+                },
+                .float_column => switch (mode_inline) {
+                    .toggle, .splitv => "focus child; split n",
+                    .stacking => return,
+                },
+                .workspace => return,
+            });
         },
     }
 }
@@ -64,13 +84,16 @@ pub const DropAction = enum { move, swap };
 
 pub fn drop(action: DropAction) !void {
     switch (action) {
-        inline else => |action_inline| try socket.run.write(
-            "[con_mark = _swaycolumns_drag]" ++ switch (action_inline) {
-                .move => "move mark _swaycolumns_drop,",
-                .swap => "swap container with mark _swaycolumns_drop,",
-            } ++ "unmark _swaycolumns_drag, focus;" ++
-                "[con_mark = _swaycolumns_drop] unmark _swaycolumns_drop;",
-        ),
+        inline else => |action_inline| {
+            const mark_drag =
+                "[con_mark = _swaycolumns_drag]" ++ switch (action_inline) {
+                    .move => "move mark _swaycolumns_drop,",
+                    .swap => "swap container with mark _swaycolumns_drop,",
+                } ++ "unmark _swaycolumns_drag, focus;";
+            const mark_drop =
+                "[con_mark = _swaycolumns_drop] unmark _swaycolumns_drop;";
+            try socket.run.write(mark_drag ++ mark_drop);
+        },
     }
 }
 

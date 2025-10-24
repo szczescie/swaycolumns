@@ -19,16 +19,19 @@ Usage: swaycolumns [command] [parameter]
 ```
 
 ```
-default_orientation horizontal
+default_orientation  horizontal
+focus_follows_mouse  always
+tiling_drag          disable
+floating_modifier    super normal
 
 bindsym {
-    super+shift+right exec swaycolumns move right
-    super+shift+left  exec swaycolumns move left
-    super+shift+up    exec swaycolumns move up
-    super+shift+down  exec swaycolumns move down
+    super+shift+right  exec swaycolumns move right
+    super+shift+left   exec swaycolumns move left
+    super+shift+up     exec swaycolumns move up
+    super+shift+down   exec swaycolumns move down
 
-    super+v exec swaycolumns focus  toggle
-    super+b exec swaycolumns layout toggle
+    super+v            exec swaycolumns focus  toggle
+    super+b            exec swaycolumns layout toggle
 }
 
 exec {
