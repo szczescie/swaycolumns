@@ -3,18 +3,16 @@
 const std = @import("std");
 
 const columns = @import("columns.zig");
-const command = @import("command.zig");
 const socket = @import("socket.zig");
 
 var fba_buf: [64 * 1024]u8 = undefined;
 pub var fba_state = std.heap.FixedBufferAllocator.init(&fba_buf);
 pub const fba = fba_state.allocator();
 
-var stdout_writer = std.fs.File.stdout().writer(&.{});
-const stdout = &stdout_writer.interface;
-
 fn help(status: u8) noreturn {
     @branchHint(.unlikely);
+    var stdout_writer = std.fs.File.stdout().writer(&.{});
+    const stdout = &stdout_writer.interface;
     stdout.writeAll(
         \\Usage: swaycolumns [command] [parameter]
         \\
@@ -25,7 +23,7 @@ fn help(status: u8) noreturn {
         \\
         \\  -h, --help          Print this message and quit.
         \\
-    ) catch {};
+    ) catch std.process.exit(1);
     std.process.exit(status);
 }
 
@@ -47,27 +45,9 @@ fn stringToParameter(T: type, subcommand: Subcommand, arg_2: ?[]const u8) T {
 fn socketFailed(err: anyerror) noreturn {
     switch (err) {
         error.SwaysockEnv => std.process.fatal("SWAYSOCK is not set", .{}),
-        error.SwaysockConnection => {
-            std.process.fatal("unable to connect to socket ({})", .{err});
-        },
+        error.SwaysockConnection => std.process.fatal("unable to connect to socket ({})", .{err}),
         else => std.process.fatal("unable to write to socket ({})", .{err}),
     }
-}
-
-fn start(arg_2: ?[]const u8) !noreturn {
-    const mod_or_null: ?command.Modifier = if (arg_2) |mod| block: {
-        const mod_lower = try std.ascii.allocLowerString(fba, mod);
-        break :block stringToParameter(command.Modifier, .start, mod_lower);
-    } else null;
-    while (true) columns.start(mod_or_null) catch |columns_err| {
-        @branchHint(.cold);
-        std.log.debug("{}", .{columns_err});
-        socket.deinit();
-        std.Thread.sleep(1 * std.time.ns_per_s);
-        socket.init() catch |socket_err| socketFailed(socket_err);
-        std.Thread.sleep(1 * std.time.ns_per_s);
-        continue;
-    };
 }
 
 pub fn main() !void {
@@ -76,16 +56,22 @@ pub fn main() !void {
     var args = std.process.args();
     _ = args.skip();
     switch (stringToSubcommand(args.next() orelse help(1))) {
-        .start => try start(args.next()),
-        .move => try columns.move(
-            stringToParameter(command.MoveDirection, .move, args.next()),
-        ),
-        .focus => try columns.focus(
-            stringToParameter(command.FocusTarget, .focus, args.next()),
-        ),
-        .layout => try columns.layout(
-            stringToParameter(command.LayoutMode, .layout, args.next()),
-        ),
+        .start => {
+            const mod_or_null: ?columns.Modifier = if (args.next()) |mod| block: {
+                const mod_lower = std.ascii.allocLowerString(fba, mod) catch std.process.exit(1);
+                break :block stringToParameter(columns.Modifier, .start, mod_lower);
+            } else null;
+            while (true) columns.start(mod_or_null) catch |columns_err| {
+                std.log.debug("{}", .{columns_err});
+                socket.deinit();
+                std.Thread.sleep(1 * std.time.ns_per_s);
+                socket.init() catch |socket_err| socketFailed(socket_err);
+                std.Thread.sleep(1 * std.time.ns_per_s);
+            };
+        },
+        .move => try columns.move(stringToParameter(columns.Direction, .move, args.next())),
+        .focus => try columns.focus(stringToParameter(columns.Target, .focus, args.next())),
+        .layout => try columns.layout(stringToParameter(columns.Mode, .layout, args.next())),
         .drop => try columns.drop(),
         .@"-h", .@"--help" => help(0),
     }

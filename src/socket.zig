@@ -68,33 +68,28 @@ const Socket = struct {
         const i3_ipc: [6]u8 = .{ 'i', '3', '-', 'i', 'p', 'c' };
         const length: [4]u8 = .{ 0, 0, 0, 0 };
         const message_type: [4]u8 = @bitCast(@intFromEnum(socket.message_type));
-        try socket.write(&(i3_ipc ++ length ++ message_type));
-    }
-
-    fn wroteHeader(socket: Socket) bool {
-        return std.mem.eql(u8, socket.writer.interface.buffer[0..6], "i3-ipc");
+        try socket.addString(&(i3_ipc ++ length ++ message_type));
     }
 
     fn nonZero(socket: Socket, length: u32) bool {
         return if (socket.message_type == .tree) true else length > 0;
     }
 
-    pub inline fn write(socket: *Socket, payload: []const u8) !void {
+    pub fn add(socket: *Socket, comptime fmt: []const u8, args: anytype) !void {
+        try socket.writer.interface.print(fmt, args);
+    }
+
+    pub fn addString(socket: *Socket, payload: []const u8) !void {
         const length: u32 = @intCast(payload.len);
         std.debug.assert(socket.nonZero(length));
         try socket.writer.interface.writeAll(payload);
     }
 
-    pub inline fn print(socket: *Socket, fmt: []const u8, args: anytype) !void {
-        try socket.writer.interface.print(fmt, args);
-    }
-
     pub fn commit(socket: *Socket) !void {
-        std.debug.assert(socket.wroteHeader());
+        std.debug.assert(std.mem.eql(u8, socket.writer.interface.buffer[0..6], "i3-ipc"));
         const length: u32 = @intCast(socket.writer.interface.end - 14);
         std.debug.assert(socket.nonZero(length));
-        const length_bytes: [4]u8 = @bitCast(length);
-        @memcpy(socket.buffers.write[6..10], &length_bytes);
+        @memcpy(socket.buffers.write[6..10], &@as([4]u8, @bitCast(length)));
         try socket.writer.interface.flush();
         try socket.writeHeader();
     }
@@ -102,26 +97,20 @@ const Socket = struct {
     fn payload_length(socket: *Socket) !u32 {
         var header: [14]u8 = undefined;
         try socket.reader.interface().readSliceAll(&header);
-        const endian = builtin.target.cpu.arch.endian();
-        return std.mem.readInt(u32, header[6..10], endian);
+        return std.mem.readInt(u32, header[6..10], builtin.target.cpu.arch.endian());
     }
 
     pub fn discard(socket: *Socket) !void {
-        const limit: std.Io.Limit = .limited(try socket.payload_length());
-        _ = try socket.reader.interface().discard(limit);
+        _ = try socket.reader.interface().discard(.limited(try socket.payload_length()));
     }
 
     pub fn parse(socket: *Socket, T: type) !T {
         const length = try socket.payload_length();
-        if (length > socket.buffers.read.len) {
-            @branchHint(.cold);
-            return error.Overflow;
-        }
-        const payload = try socket.reader.interface().peek(length);
-        socket.reader.interface().toss(length);
-        return std.json.parseFromSliceLeaky(T, main.fba, payload, .{
-            .ignore_unknown_fields = true,
-            .allocate = .alloc_if_needed,
-        });
+        if (length > socket.buffers.read.len) return error.Overflow;
+        defer socket.reader.interface().toss(length);
+        const slice = try socket.reader.interface().peek(length);
+        const options: std.json.ParseOptions =
+            .{ .ignore_unknown_fields = true, .allocate = .alloc_if_needed };
+        return std.json.parseFromSliceLeaky(T, main.fba, slice, options);
     }
 };
