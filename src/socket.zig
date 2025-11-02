@@ -6,55 +6,45 @@ const builtin = @import("builtin");
 const main = @import("main.zig");
 
 pub var subscribe: Socket = undefined;
-pub var run: Socket = undefined;
 pub var tree: Socket = undefined;
+pub var run: Socket = undefined;
 
-var subscribe_buffer: Arrays(64, 524_288) = undefined;
-var run_buffer: Arrays(1024, 1024) = undefined;
-var tree_buffer: Arrays(64, 524_288) = undefined;
+var buffer_subscribe: struct { [50]u8, [500_000]u8 } = undefined;
+var buffer_tree: struct { [50]u8, [500_000]u8 } = undefined;
+var buffer_run: struct { [1000]u8, [1000]u8 } = undefined;
 
 pub fn init() !void {
-    subscribe = try .init(.subscribe, slices(&subscribe_buffer));
-    run = try .init(.run, slices(&run_buffer));
-    tree = try .init(.tree, slices(&tree_buffer));
+    subscribe = try .init(.subscribe, &buffer_subscribe.@"0", &buffer_subscribe.@"1");
+    run = try .init(.run, &buffer_run.@"0", &buffer_run.@"1");
+    tree = try .init(.tree, &buffer_tree.@"0", &buffer_tree.@"1");
 }
 
 pub fn deinit() void {
     subscribe.deinit();
-    run.deinit();
     tree.deinit();
-}
-
-fn Arrays(comptime write_len: usize, comptime read_len: usize) type {
-    std.debug.assert(write_len > 0);
-    std.debug.assert(read_len > 0);
-    return struct { write: [write_len]u8, read: [read_len]u8 };
-}
-
-const Buffers = struct { write: []u8, read: []u8 };
-
-fn slices(arrays: anytype) Buffers {
-    return .{ .write = &arrays.write, .read = &arrays.read };
+    run.deinit();
 }
 
 const MessageType = enum(u32) { run = 0, subscribe = 2, tree = 4 };
 
 const Socket = struct {
     message_type: MessageType,
-    buffers: Buffers,
+    buffer_write: []u8,
+    buffer_read: []u8,
     writer: std.net.Stream.Writer,
     reader: std.net.Stream.Reader,
 
-    pub fn init(message_type: MessageType, buffers: Buffers) !Socket {
+    pub fn init(message_type: MessageType, buffer_write: []u8, buffer_read: []u8) !Socket {
         const socket_path = std.posix.getenv("SWAYSOCK") orelse
             return error.SwaysockEnv;
         const stream = std.net.connectUnixSocket(socket_path) catch
             return error.SwaysockConnection;
         var socket: Socket = .{
             .message_type = message_type,
-            .buffers = buffers,
-            .writer = stream.writer(buffers.write),
-            .reader = stream.reader(buffers.read),
+            .buffer_write = buffer_write,
+            .buffer_read = buffer_read,
+            .writer = stream.writer(buffer_write),
+            .reader = stream.reader(buffer_read),
         };
         try socket.writeHeader();
         return socket;
@@ -93,7 +83,7 @@ const Socket = struct {
         std.debug.assert(std.mem.eql(u8, socket.writer.interface.buffer[0..6], "i3-ipc"));
         const length: u32 = socket.lengthWrite();
         std.debug.assert(socket.nonZero(length));
-        @memcpy(socket.buffers.write[6..10], &@as([4]u8, @bitCast(length)));
+        @memcpy(socket.buffer_write[6..10], &@as([4]u8, @bitCast(length)));
         try socket.writer.interface.flush();
         try socket.writeHeader();
     }
@@ -110,7 +100,7 @@ const Socket = struct {
 
     pub fn parse(socket: *Socket, T: type) !T {
         const length = try socket.lengthRead();
-        if (length > socket.buffers.read.len) return error.Overflow;
+        if (length > socket.buffer_read.len) return error.Overflow;
         defer socket.reader.interface().toss(length);
         const slice = try socket.reader.interface().peek(length);
         const options: std.json.ParseOptions =

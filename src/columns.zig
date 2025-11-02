@@ -28,14 +28,14 @@ pub const Direction = enum { left, right, up, down };
 pub fn move(direction: Direction) !void {
     const Root = struct {
         nodes: []const Output,
-        pub const Output = struct { nodes: []const Workspace };
-        pub const Workspace = struct {
+        const Output = struct { nodes: []const Workspace };
+        const Workspace = struct {
             focused: bool,
             nodes: []const Column,
             floating_nodes: []const Column,
         };
-        pub const Column = struct { focused: bool, id: u32, nodes: []const Window };
-        pub const Window = struct { focused: bool };
+        const Column = struct { focused: bool, id: u32, nodes: []const Window };
+        const Window = struct { focused: bool };
     };
     const Focused = union(enum) {
         column_tiled: struct { []const Root.Column, usize },
@@ -100,14 +100,14 @@ pub const Target = enum { window, column, workspace, toggle };
 pub fn focus(target: Target) !void {
     const Root = struct {
         nodes: []const Output,
-        pub const Output = struct { nodes: []const Workspace };
-        pub const Workspace = struct {
+        const Output = struct { nodes: []const Workspace };
+        const Workspace = struct {
             focused: bool,
             nodes: []const Column,
             floating_nodes: []const Column,
         };
-        pub const Column = struct { focused: bool, nodes: []const Window };
-        pub const Window = struct { focused: bool };
+        const Column = struct { focused: bool, nodes: []const Window };
+        const Window = struct { focused: bool };
     };
     const Focused = enum {
         workspace,
@@ -163,14 +163,14 @@ pub const Mode = enum { splitv, stacking, toggle };
 pub fn layout(mode: Mode) !void {
     const Root = struct {
         nodes: []const Output,
-        pub const Output = struct { nodes: []const Workspace };
-        pub const Workspace = struct {
+        const Output = struct { nodes: []const Workspace };
+        const Workspace = struct {
             focused: bool,
             nodes: []const Column,
             floating_nodes: []const Column,
         };
-        pub const Column = struct { focused: bool, nodes: []const Window };
-        pub const Window = struct { focused: bool };
+        const Column = struct { focused: bool, nodes: []const Window };
+        const Window = struct { focused: bool };
     };
     const Focused = enum {
         container_tiled,
@@ -241,10 +241,10 @@ pub fn tile() !void {
     @branchHint(.likely);
     const Root = struct {
         nodes: []const Output,
-        pub const Output = struct { nodes: []const Workspace };
-        pub const Workspace = struct { nodes: []const Column };
-        pub const Column = struct { id: u32, layout: []const u8, nodes: []const Window };
-        pub const Window = struct { layout: []const u8, id: u32 };
+        const Output = struct { nodes: []const Workspace };
+        const Workspace = struct { nodes: []const Column };
+        const Column = struct { id: u32, layout: []const u8, nodes: []const Window };
+        const Window = struct { layout: []const u8, id: u32 };
     };
     for ((try tree(Root)).nodes) |output|
         for (output.nodes) |workspace|

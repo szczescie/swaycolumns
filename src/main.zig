@@ -5,11 +5,11 @@ const std = @import("std");
 const columns = @import("columns.zig");
 const socket = @import("socket.zig");
 
-var fba_buf: [64 * 1024]u8 = undefined;
+var fba_buf: [50_000]u8 = undefined;
 pub var fba_state = std.heap.FixedBufferAllocator.init(&fba_buf);
 pub const fba = fba_state.allocator();
 
-fn help(status: u8) noreturn {
+fn helpExit(status: u8) noreturn {
     @branchHint(.unlikely);
     var stdout_writer = std.fs.File.stdout().writer(&.{});
     const stdout = &stdout_writer.interface;
@@ -29,17 +29,11 @@ fn help(status: u8) noreturn {
 
 const Subcommand = enum { start, focus, move, layout, drop, @"-h", @"--help" };
 
-fn stringToSubcommand(arg_1: ?[]const u8) Subcommand {
-    const subcommand = arg_1 orelse help(1);
-    return std.meta.stringToEnum(Subcommand, subcommand) orelse
-        std.process.fatal("{s} is an invalid subcommand", .{subcommand});
-}
-
-fn stringToParameter(T: type, subcommand: Subcommand, arg_2: ?[]const u8) T {
-    const parameter = arg_2 orelse
+fn parameter(T: type, subcommand: Subcommand, arg_2_or_null: ?[]const u8) T {
+    const arg_2 = arg_2_or_null orelse
         std.process.fatal("{t} is missing a parameter", .{subcommand});
-    return std.meta.stringToEnum(T, parameter) orelse
-        std.process.fatal("{s} is an invalid parameter", .{parameter});
+    return std.meta.stringToEnum(T, arg_2) orelse
+        std.process.fatal("{s} is an invalid parameter", .{arg_2});
 }
 
 fn socketFailed(err: anyerror) noreturn {
@@ -55,11 +49,14 @@ pub fn main() !void {
     defer socket.deinit();
     var args = std.process.args();
     _ = args.skip();
-    switch (stringToSubcommand(args.next() orelse help(1))) {
+    const arg_1 = args.next() orelse helpExit(1);
+    const subcommand = std.meta.stringToEnum(Subcommand, arg_1) orelse
+        std.process.fatal("{s} is an invalid subcommand", .{arg_1});
+    switch (subcommand) {
         .start => {
             const mod_or_null: ?columns.Modifier = if (args.next()) |mod| block: {
                 const mod_lower = std.ascii.allocLowerString(fba, mod) catch std.process.exit(1);
-                break :block stringToParameter(columns.Modifier, .start, mod_lower);
+                break :block parameter(columns.Modifier, .start, mod_lower);
             } else null;
             while (true) columns.start(mod_or_null) catch |columns_err| {
                 std.log.debug("{}", .{columns_err});
@@ -69,10 +66,10 @@ pub fn main() !void {
                 std.Thread.sleep(1 * std.time.ns_per_s);
             };
         },
-        .move => try columns.move(stringToParameter(columns.Direction, .move, args.next())),
-        .focus => try columns.focus(stringToParameter(columns.Target, .focus, args.next())),
-        .layout => try columns.layout(stringToParameter(columns.Mode, .layout, args.next())),
+        .move => try columns.move(parameter(columns.Direction, .move, args.next())),
+        .focus => try columns.focus(parameter(columns.Target, .focus, args.next())),
+        .layout => try columns.layout(parameter(columns.Mode, .layout, args.next())),
         .drop => try columns.drop(),
-        .@"-h", .@"--help" => help(0),
+        .@"-h", .@"--help" => helpExit(0),
     }
 }
