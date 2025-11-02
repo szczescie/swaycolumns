@@ -1,26 +1,29 @@
-//! Main tiling logic.
-
 const std = @import("std");
 
 const main = @import("main.zig");
-const socket = @import("socket.zig");
 
 fn tree(T: type) !T {
-    try socket.tree.addString("");
-    try socket.tree.commit();
-    return socket.tree.parse(T);
+    try main.tree.addString("");
+    try main.tree.commit();
+    return main.tree.parse(T);
 }
 
-fn run(comptime fmt: []const u8, args: anytype) !void {
-    try socket.run.add(fmt, args);
-    try socket.run.commit();
-    try socket.run.discard();
+fn runPrint(comptime fmt: []const u8, args: anytype) !void {
+    try main.run.add(fmt, args);
+    try main.run.commit();
+    try main.run.discard();
 }
 
-fn runString(payload: []const u8) !void {
-    try socket.run.addString(payload);
-    try socket.run.commit();
-    try socket.run.discard();
+fn run(command: []const u8) !void {
+    try main.run.addString(command);
+    try main.run.commit();
+    try main.run.discard();
+}
+
+fn subscribe(events: []const u8) !void {
+    try main.subscribe.addString(events);
+    try main.subscribe.commit();
+    try main.subscribe.discard();
 }
 
 pub const Direction = enum { left, right, up, down };
@@ -29,11 +32,7 @@ pub fn move(direction: Direction) !void {
     const Root = struct {
         nodes: []const Output,
         const Output = struct { nodes: []const Workspace };
-        const Workspace = struct {
-            focused: bool,
-            nodes: []const Column,
-            floating_nodes: []const Column,
-        };
+        const Workspace = struct { focused: bool, nodes: []const Column, floating_nodes: []const Column };
         const Column = struct { focused: bool, id: u32, nodes: []const Window };
         const Window = struct { focused: bool };
     };
@@ -70,25 +69,25 @@ pub fn move(direction: Direction) !void {
                 .right => if (column_index < columns.len - 1) column_index + 1 else return,
                 else => return,
             };
-            return run("swap container with con_id {};", .{columns[swap_index].id});
+            return runPrint("swap container with con_id {};", .{columns[swap_index].id});
         },
         .window_tiled => |location| {
             const columns, const column_index, const windows, const window_index = location;
             switch (direction) {
-                .up => if (window_index > 0) return run("move up;", .{}),
-                .down => if (window_index < windows.len - 1) return run("move down;", .{}),
-                .left => if (column_index > 0 or windows.len > 1) return run("move left;", .{}),
+                .up => if (window_index > 0) return run("move up;"),
+                .down => if (window_index < windows.len - 1) return run("move down;"),
+                .left => if (column_index > 0 or windows.len > 1) return run("move left;"),
                 .right => {
-                    if (column_index < columns.len - 1) return run("move right, move down;", .{});
-                    if (windows.len > 1) return run("move right;", .{});
+                    if (column_index < columns.len - 1) return run("move right, move down;");
+                    if (windows.len > 1) return run("move right;");
                 },
             }
         },
         .window_float => |location| {
             const windows, const window_index = location;
             switch (direction) {
-                .up => if (window_index > 0) return run("move up;", .{}),
-                .down => if (window_index < windows.len - 1) return run("move down;", .{}),
+                .up => if (window_index > 0) return run("move up;"),
+                .down => if (window_index < windows.len - 1) return run("move down;"),
                 else => return,
             }
         },
@@ -101,11 +100,7 @@ pub fn focus(target: Target) !void {
     const Root = struct {
         nodes: []const Output,
         const Output = struct { nodes: []const Workspace };
-        const Workspace = struct {
-            focused: bool,
-            nodes: []const Column,
-            floating_nodes: []const Column,
-        };
+        const Workspace = struct { focused: bool, nodes: []const Column, floating_nodes: []const Column };
         const Column = struct { focused: bool, nodes: []const Window };
         const Window = struct { focused: bool };
     };
@@ -137,23 +132,23 @@ pub fn focus(target: Target) !void {
     } else return;
     switch (focused) {
         .workspace => switch (target) {
-            .window, .toggle => return runString("focus child, focus child;"),
-            .column => return runString("focus child;"),
+            .window, .toggle => return run("focus child, focus child;"),
+            .column => return run("focus child;"),
             .workspace => return,
         },
         .column_tiled, .column_float => switch (target) {
-            .window => return runString("focus child;"),
+            .window => return run("focus child;"),
             .column => return,
-            .workspace, .toggle => return runString("focus parent;"),
+            .workspace, .toggle => return run("focus parent;"),
         },
         .window_tiled, .window_float => switch (target) {
             .window => return,
-            .column, .toggle => return runString("focus parent;"),
-            .workspace => return runString("focus parent, focus parent;"),
+            .column, .toggle => return run("focus parent;"),
+            .workspace => return run("focus parent, focus parent;"),
         },
         .container_float => switch (target) {
             .window, .column => return,
-            .workspace, .toggle => return runString("focus parent;"),
+            .workspace, .toggle => return run("focus parent;"),
         },
     }
 }
@@ -164,11 +159,7 @@ pub fn layout(mode: Mode) !void {
     const Root = struct {
         nodes: []const Output,
         const Output = struct { nodes: []const Workspace };
-        const Workspace = struct {
-            focused: bool,
-            nodes: []const Column,
-            floating_nodes: []const Column,
-        };
+        const Workspace = struct { focused: bool, nodes: []const Column, floating_nodes: []const Column };
         const Column = struct { focused: bool, nodes: []const Window };
         const Window = struct { focused: bool };
     };
@@ -206,7 +197,7 @@ pub fn layout(mode: Mode) !void {
         inline else => |mode_inline| {
             const toggle = "layout toggle splitv stacking;";
             const set = "layout " ++ @tagName(mode_inline) ++ ";";
-            const payload = switch (focused) {
+            const command = switch (focused) {
                 .container_tiled => switch (mode_inline) {
                     .toggle => "layout toggle stacking splitv;",
                     .splitv, .stacking => set,
@@ -232,12 +223,12 @@ pub fn layout(mode: Mode) !void {
                     .stacking => return,
                 },
             };
-            return runString(payload);
+            return run(command);
         },
     }
 }
 
-pub fn tile() !void {
+fn tile() !void {
     @branchHint(.likely);
     const Root = struct {
         nodes: []const Output,
@@ -249,24 +240,25 @@ pub fn tile() !void {
     for ((try tree(Root)).nodes) |output|
         for (output.nodes) |workspace|
             for (workspace.nodes) |column| {
-                if (workspace.nodes.len == 1 and column.nodes.len == 1 and std.mem.eql(u8, column.layout, "splitv")) {
-                    try socket.run.add("[con_id = {}] split n;", .{column.nodes[0].id});
+                const singular_window = workspace.nodes.len == 1 and column.nodes.len == 1;
+                if (singular_window and std.mem.eql(u8, column.layout, "splitv")) {
+                    try main.run.add("[con_id = {}] split n;", .{column.nodes[0].id});
                     break;
                 }
                 if (workspace.nodes.len >= 2 and std.mem.eql(u8, column.layout, "none")) {
-                    try socket.run.add("[con_id = {}] split v;", .{column.id});
+                    try main.run.add("[con_id = {}] split v;", .{column.id});
                     continue;
                 }
                 for (column.nodes) |window|
                     if (!std.mem.eql(u8, window.layout, "none")) { // eject nested
                         @branchHint(.unlikely);
                         for (0..workspace.nodes.len) |_|
-                            try socket.run.add("[con_id = {}] move right;", .{window.id});
+                            try main.run.add("[con_id = {}] move right;", .{window.id});
                     };
             };
-    if (socket.run.lengthWrite() == 0) return;
-    try socket.run.commit();
-    try socket.run.discard();
+    if (main.run.lengthWrite() == 0) return;
+    try main.run.commit();
+    try main.run.discard();
 }
 
 pub const Modifier = enum { super, mod4, alt, mod1 };
@@ -305,9 +297,9 @@ inline fn drag(mod: Modifier) !void {
                 "mark --add _swaycolumns_drag;" ++
                 "bindsym --whole-window --release " ++ button ++
                 "'mark --add _swaycolumns_drop; exec swaycolumns drop';";
-            const payload, const current_state: HotkeyState =
+            const command, const current_state: HotkeyState =
                 if (state == .unset) .{ unset, .unset } else .{ set, .set };
-            try runString(payload);
+            try run(command);
             state_previous = current_state;
         },
     };
@@ -345,7 +337,7 @@ pub fn drop() !void {
                 } ++ "unmark _swaycolumns_drag, focus;";
             const mark_drop =
                 "[con_mark = _swaycolumns_drop] unmark _swaycolumns_drop;";
-            return runString(mark_drag ++ mark_drop);
+            return run(mark_drag ++ mark_drop);
         },
     }
 }
@@ -356,13 +348,11 @@ inline fn reload(mod_or_null: ?Modifier) !void {
 }
 
 pub fn start(mod_or_null: ?Modifier) !void {
-    try socket.subscribe.addString("[\"window\", \"workspace\", \"shutdown\"]");
-    try socket.subscribe.commit();
-    try socket.subscribe.discard();
+    try subscribe("[\"window\", \"workspace\", \"shutdown\"]");
     try reload(mod_or_null);
     while (true) {
-        defer main.fba_state.reset();
-        const event = try socket.subscribe.parse(struct { change: []const u8 });
+        defer main.fba.reset();
+        const event = try main.subscribe.parse(struct { change: []const u8 });
         if (std.mem.eql(u8, event.change, "reload")) {
             @branchHint(.unlikely);
             return reload(mod_or_null);
