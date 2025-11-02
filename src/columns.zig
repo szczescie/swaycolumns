@@ -242,7 +242,7 @@ pub fn tile() !void {
     const Root = struct {
         nodes: []const Output,
         pub const Output = struct { nodes: []const Workspace };
-        pub const Workspace = struct { layout: []const u8, nodes: []const Column };
+        pub const Workspace = struct { nodes: []const Column };
         pub const Column = struct { id: u32, layout: []const u8, nodes: []const Window };
         pub const Window = struct { layout: []const u8, id: u32 };
     };
@@ -258,9 +258,11 @@ pub fn tile() !void {
                     continue;
                 }
                 for (column.nodes) |window|
-                    if (!std.mem.eql(u8, window.layout, "none")) // eject nested
+                    if (!std.mem.eql(u8, window.layout, "none")) { // eject nested
+                        @branchHint(.unlikely);
                         for (0..workspace.nodes.len) |_|
                             try socket.run.add("[con_id = {}] move right;", .{window.id});
+                    };
             };
     if (socket.run.lengthWrite() == 0) return;
     try socket.run.commit();
