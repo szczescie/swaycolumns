@@ -85,27 +85,31 @@ const Socket = struct {
         try socket.writer.interface.writeAll(payload);
     }
 
+    pub fn lengthWrite(socket: *Socket) u32 {
+        return @intCast(socket.writer.interface.end - 14);
+    }
+
     pub fn commit(socket: *Socket) !void {
         std.debug.assert(std.mem.eql(u8, socket.writer.interface.buffer[0..6], "i3-ipc"));
-        const length: u32 = @intCast(socket.writer.interface.end - 14);
+        const length: u32 = socket.lengthWrite();
         std.debug.assert(socket.nonZero(length));
         @memcpy(socket.buffers.write[6..10], &@as([4]u8, @bitCast(length)));
         try socket.writer.interface.flush();
         try socket.writeHeader();
     }
 
-    fn payload_length(socket: *Socket) !u32 {
+    fn lengthRead(socket: *Socket) !u32 {
         var header: [14]u8 = undefined;
         try socket.reader.interface().readSliceAll(&header);
         return std.mem.readInt(u32, header[6..10], builtin.target.cpu.arch.endian());
     }
 
     pub fn discard(socket: *Socket) !void {
-        _ = try socket.reader.interface().discard(.limited(try socket.payload_length()));
+        _ = try socket.reader.interface().discard(.limited(try socket.lengthRead()));
     }
 
     pub fn parse(socket: *Socket, T: type) !T {
-        const length = try socket.payload_length();
+        const length = try socket.lengthRead();
         if (length > socket.buffers.read.len) return error.Overflow;
         defer socket.reader.interface().toss(length);
         const slice = try socket.reader.interface().peek(length);

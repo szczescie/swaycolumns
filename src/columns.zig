@@ -42,8 +42,7 @@ pub fn move(direction: Direction) !void {
         window_tiled: struct { []const Root.Column, usize, []const Root.Window, usize },
         window_float: struct { []const Root.Window, usize },
     };
-    const root = try tree(Root);
-    const focused: Focused = loop: for (root.nodes) |output| {
+    const focused: Focused = loop: for ((try tree(Root)).nodes) |output| {
         for (output.nodes) |workspace| {
             if (workspace.focused) return;
             for (workspace.nodes, 0..) |column, column_index| {
@@ -118,8 +117,7 @@ pub fn focus(target: Target) !void {
         column_float,
         window_float,
     };
-    const root = try tree(Root);
-    const focused: Focused = loop: for (root.nodes) |output| {
+    const focused: Focused = loop: for ((try tree(Root)).nodes) |output| {
         for (output.nodes) |workspace| {
             if (workspace.focused) break :loop .workspace;
             for (workspace.nodes) |column| {
@@ -174,28 +172,31 @@ pub fn layout(mode: Mode) !void {
         pub const Column = struct { focused: bool, nodes: []const Window };
         pub const Window = struct { focused: bool };
     };
-    const Focused = union(enum) {
+    const Focused = enum {
+        container_tiled,
         column_tiled,
         window_tiled,
         container_float,
-        column_float: usize,
+        column_float_one_window,
         window_float,
     };
-    const root = try tree(Root);
-    const focused: Focused = loop: for (root.nodes) |output| {
+    const focused: Focused = loop: for ((try tree(Root)).nodes) |output| {
         for (output.nodes) |workspace| {
             if (workspace.focused) return;
             for (workspace.nodes) |column| {
-                if (column.focused) break :loop .column_tiled;
+                if (column.focused) {
+                    if (column.nodes.len == 0) break :loop .container_tiled;
+                    break :loop .column_tiled;
+                }
                 for (column.nodes) |window|
                     if (window.focused) break :loop .window_tiled;
             }
             for (workspace.floating_nodes) |column_float| {
-                if (column_float.focused) {
-                    const window_count = column_float.nodes.len;
-                    if (window_count == 0) break :loop .container_float;
-                    break :loop .{ .column_float = window_count };
-                }
+                if (column_float.focused) switch (column_float.nodes.len) {
+                    0 => break :loop .container_float,
+                    1 => break :loop .column_float_one_window,
+                    else => return,
+                };
                 for (column_float.nodes) |window_float|
                     if (window_float.focused) break :loop .window_float;
             }
@@ -206,6 +207,10 @@ pub fn layout(mode: Mode) !void {
             const toggle = "layout toggle splitv stacking;";
             const set = "layout " ++ @tagName(mode_inline) ++ ";";
             const payload = switch (focused) {
+                .container_tiled => switch (mode_inline) {
+                    .toggle => "layout toggle stacking splitv;",
+                    .splitv, .stacking => set,
+                },
                 .column_tiled => switch (mode_inline) {
                     .toggle => "focus child;" ++ toggle ++ "focus parent;",
                     .splitv, .stacking => "focus child;" ++ set ++ "focus parent;",
@@ -218,8 +223,8 @@ pub fn layout(mode: Mode) !void {
                     .toggle => "split v; " ++ toggle,
                     .splitv, .stacking => "split v; " ++ set,
                 },
-                .column_float => |window_count| switch (mode_inline) {
-                    .toggle, .splitv => if (window_count == 1) "focus child; split n" else return,
+                .column_float_one_window => switch (mode_inline) {
+                    .toggle, .splitv => "focus child; split n",
                     .stacking => return,
                 },
                 .window_float => switch (mode_inline) {
@@ -241,29 +246,23 @@ pub fn tile() !void {
         pub const Column = struct { id: u32, layout: []const u8, nodes: []const Window };
         pub const Window = struct { layout: []const u8, id: u32 };
     };
-    const root = try tree(Root);
-    for (root.nodes) |output| {
-        for (output.nodes) |workspace| {
-            const columns = workspace.nodes;
-            if (columns.len == 1 and columns[0].nodes.len == 1) {
-                const windows = columns[0].nodes;
-                try socket.run.add("[con_id = {}] split n;", .{windows[0].id});
-            } else if (columns.len >= 1 and std.mem.eql(u8, workspace.layout, "splitv")) {
-                try socket.run.add("[con_id = {}] move right, move left;", .{columns[0].id});
-                for (0..columns[0].nodes.len) |_|
-                    try socket.run.add("[con_id = {}] move up;", .{columns[0].id});
-            } else for (columns) |column| {
-                if (columns.len >= 2 and std.mem.eql(u8, column.layout, "none"))
-                    try socket.run.add("[con_id = {}] split v;", .{column.id});
-                for (column.nodes) |window| {
-                    if (!std.mem.eql(u8, window.layout, "none")) // eject nested
-                        for (0..columns.len) |_|
-                            try socket.run.add("[con_id = {}] move right;", .{window.id});
+    for ((try tree(Root)).nodes) |output|
+        for (output.nodes) |workspace|
+            for (workspace.nodes) |column| {
+                if (workspace.nodes.len == 1 and column.nodes.len == 1 and std.mem.eql(u8, column.layout, "splitv")) {
+                    try socket.run.add("[con_id = {}] split n;", .{column.nodes[0].id});
+                    break;
                 }
-            }
-        }
-    }
-    if (socket.run.writer.interface.end - 14 == 0) return;
+                if (workspace.nodes.len >= 2 and std.mem.eql(u8, column.layout, "none")) {
+                    try socket.run.add("[con_id = {}] split v;", .{column.id});
+                    continue;
+                }
+                for (column.nodes) |window|
+                    if (!std.mem.eql(u8, window.layout, "none")) // eject nested
+                        for (0..workspace.nodes.len) |_|
+                            try socket.run.add("[con_id = {}] move right;", .{window.id});
+            };
+    if (socket.run.lengthWrite() == 0) return;
     try socket.run.commit();
     try socket.run.discard();
 }
@@ -285,8 +284,7 @@ inline fn drag(mod: Modifier) !void {
         const Column = struct { focused: bool, nodes: []const Window };
         const Window = struct { focused: bool };
     };
-    const root = try tree(Root);
-    const state: HotkeyState = loop: for (root.nodes) |output| {
+    const state: HotkeyState = loop: for ((try tree(Root)).nodes) |output| {
         for (output.nodes) |workspace|
             for (workspace.floating_nodes) |column_float| {
                 if (column_float.focused) break :loop .unset;
@@ -321,9 +319,8 @@ pub fn drop() !void {
         const Column = struct { id: u32, nodes: []const Window };
         const Window = struct { marks: []const []const u8 };
     };
-    const root = try tree(Root);
     const DropAction = enum { move, swap };
-    const action: DropAction = outer: for (root.nodes) |output| {
+    const action: DropAction = outer: for ((try tree(Root)).nodes) |output| {
         for (output.nodes) |workspace|
             for (workspace.nodes) |column| {
                 const drag_column = inner: for (column.nodes) |window| {
