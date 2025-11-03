@@ -3,25 +3,25 @@ const std = @import("std");
 const main = @import("main.zig");
 
 fn tree(T: type) !T {
-    try main.tree.addString("");
+    try main.tree.add("");
     try main.tree.commit();
     return main.tree.parse(T);
 }
 
 fn runPrint(comptime fmt: []const u8, args: anytype) !void {
-    try main.run.add(fmt, args);
+    try main.run.addPrint(fmt, args);
     try main.run.commit();
     try main.run.discard();
 }
 
 fn run(command: []const u8) !void {
-    try main.run.addString(command);
+    try main.run.add(command);
     try main.run.commit();
     try main.run.discard();
 }
 
 fn subscribe(events: []const u8) !void {
-    try main.subscribe.addString(events);
+    try main.subscribe.add(events);
     try main.subscribe.commit();
     try main.subscribe.discard();
 }
@@ -242,18 +242,18 @@ fn tile() !void {
             for (workspace.nodes) |column| {
                 const singular_window = workspace.nodes.len == 1 and column.nodes.len == 1;
                 if (singular_window and std.mem.eql(u8, column.layout, "splitv")) {
-                    try main.run.add("[con_id = {}] split n;", .{column.nodes[0].id});
+                    try main.run.addPrint("[con_id = {}] split n;", .{column.nodes[0].id});
                     break;
                 }
                 if (workspace.nodes.len >= 2 and std.mem.eql(u8, column.layout, "none")) {
-                    try main.run.add("[con_id = {}] split v;", .{column.id});
+                    try main.run.addPrint("[con_id = {}] split v;", .{column.id});
                     continue;
                 }
                 for (column.nodes) |window|
                     if (!std.mem.eql(u8, window.layout, "none")) { // eject nested
                         @branchHint(.unlikely);
                         for (0..workspace.nodes.len) |_|
-                            try main.run.add("[con_id = {}] move right;", .{window.id});
+                            try main.run.addPrint("[con_id = {}] move right;", .{window.id});
                     };
             };
     if (main.run.lengthWrite() == 0) return;

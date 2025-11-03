@@ -43,20 +43,14 @@ fn socket(message_type: MessageType, len_write: usize, len_read: usize) type {
             const i3_ipc: [6]u8 = .{ 'i', '3', '-', 'i', 'p', 'c' };
             const length: [4]u8 = .{ 0, 0, 0, 0 };
             const @"type": [4]u8 = @bitCast(@intFromEnum(message_type));
-            try addString(&(i3_ipc ++ length ++ @"type"));
+            try add(&(i3_ipc ++ length ++ @"type"));
         }
 
-        inline fn nonZero(length: u32) bool {
-            return if (message_type == .tree) true else length > 0;
-        }
-
-        pub fn add(comptime fmt: []const u8, args: anytype) !void {
+        pub fn addPrint(comptime fmt: []const u8, args: anytype) !void {
             try writer.interface.print(fmt, args);
         }
 
-        pub fn addString(payload: []const u8) !void {
-            const length: u32 = @intCast(payload.len);
-            std.debug.assert(nonZero(length));
+        pub fn add(payload: []const u8) !void {
             try writer.interface.writeAll(payload);
         }
 
@@ -67,7 +61,7 @@ fn socket(message_type: MessageType, len_write: usize, len_read: usize) type {
         pub fn commit() !void {
             std.debug.assert(std.mem.eql(u8, writer.interface.buffer[0..6], "i3-ipc"));
             const length: u32 = lengthWrite();
-            std.debug.assert(nonZero(length));
+            if (message_type != .tree) std.debug.assert(length > 0);
             @memcpy(buffer_write[6..10], &@as([4]u8, @bitCast(length)));
             try writer.interface.flush();
             try writeHeader();
