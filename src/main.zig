@@ -63,6 +63,8 @@ fn socket(message_type: MessageType, len_write: usize, len_read: usize) type {
             const length: u32 = lengthWrite();
             if (message_type != .tree) std.debug.assert(length > 0);
             @memcpy(buffer_write[6..10], &@as([4]u8, @bitCast(length)));
+            // if (writer.interface.end > 14)
+            //     std.debug.print("{s}\n", .{writer.interface.buffered()});
             try writer.interface.flush();
             try writeHeader();
         }
@@ -89,30 +91,37 @@ fn socket(message_type: MessageType, len_write: usize, len_read: usize) type {
     };
 }
 
+const help_text =
+    \\Usage: swaycolumns [command] [parameter]
+    \\
+    \\ start [modifier]                  Start the background process and set a floating modifier.
+    \\ move <direction>                  Move windows or swap columns.
+    \\ move workspace [number] <name>    Move window or column to workspace.
+    \\ focus <target>                    Focus window, column or workspace.
+    \\ layout <mode>                     Switch column layout to splitv or stacking.
+    \\
+;
+
 fn helpExit(status: u8) noreturn {
     @branchHint(.unlikely);
     var stdout = std.fs.File.stdout().writer(&.{});
-    stdout.interface.writeAll(
-        \\Usage: swaycolumns [command] [parameter]
-        \\
-        \\  start [modifier]    Start the daemon and set a floating modifier.
-        \\  move <direction>    Move windows or swap columns.
-        \\  focus <target>      Focus window, column or workspace.
-        \\  layout <mode>       Switch column layout to splitv or stacking.
-        \\
-        \\  -h, --help          Print this message and quit.
-        \\
-    ) catch std.process.exit(1);
+    stdout.interface.writeAll(help_text) catch std.process.exit(1);
     std.process.exit(status);
 }
 
 const Subcommand = enum { start, focus, move, layout, drop, @"-h", @"--help" };
 
-fn parameter(T: type, subcommand: Subcommand, arg_2_or_null: ?[]const u8) T {
-    const arg_2 = arg_2_or_null orelse
-        std.process.fatal("{t} is missing a parameter", .{subcommand});
-    return std.meta.stringToEnum(T, arg_2) orelse
-        std.process.fatal("{s} is an invalid parameter", .{arg_2});
+fn fatalMissing(subcommand: []const u8) noreturn {
+    std.process.fatal("{s} is missing a parameter", .{subcommand});
+}
+
+fn fatalInvalid(parameter: []const u8) noreturn {
+    std.process.fatal("{s} is an invalid parameter", .{parameter});
+}
+
+fn stringToParameter(T: type, subcommand: Subcommand, arg_2_or_null: ?[]const u8) T {
+    const arg_2 = arg_2_or_null orelse fatalMissing(@tagName(subcommand));
+    return std.meta.stringToEnum(T, arg_2) orelse fatalInvalid(arg_2);
 }
 
 pub fn main() !void {
@@ -128,7 +137,7 @@ pub fn main() !void {
             const mod_or_null: ?columns.Modifier = if (args.next()) |mod| block: {
                 const mod_lower = std.ascii.allocLowerString(fba.allocator(), mod) catch
                     std.process.exit(1);
-                break :block parameter(columns.Modifier, .start, mod_lower);
+                break :block stringToParameter(columns.Modifier, .start, mod_lower);
             } else null;
             subscribe.init();
             while (true) columns.start(mod_or_null) catch |err| {
@@ -137,9 +146,23 @@ pub fn main() !void {
                 std.Thread.sleep(3 * std.time.ns_per_s);
             };
         },
-        .move => try columns.move(parameter(columns.Direction, .move, args.next())),
-        .focus => try columns.focus(parameter(columns.Target, .focus, args.next())),
-        .layout => try columns.layout(parameter(columns.Mode, .layout, args.next())),
+        .move => {
+            const parameter = args.next() orelse fatalMissing(@tagName(.move));
+            if (std.mem.eql(u8, parameter, "workspace")) {
+                const name_or_specifier = args.next() orelse fatalMissing("workspace");
+                if (std.mem.eql(u8, name_or_specifier, "number")) {
+                    const number = args.next() orelse fatalMissing("number");
+                    return columns.moveWorkspace(.number, number) catch |err| switch (err) {
+                        error.NumberInvalid => fatalInvalid("number"),
+                        else => err,
+                    };
+                }
+                return columns.moveWorkspace(.name, name_or_specifier);
+            }
+            try columns.move(stringToParameter(columns.Direction, .move, parameter));
+        },
+        .focus => try columns.focus(stringToParameter(columns.Target, .focus, args.next())),
+        .layout => try columns.layout(stringToParameter(columns.Mode, .layout, args.next())),
         .@"-h", .@"--help" => helpExit(0),
         .drop => try columns.drop(),
     }

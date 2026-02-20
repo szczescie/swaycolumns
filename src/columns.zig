@@ -2,7 +2,7 @@ const std = @import("std");
 
 const main = @import("main.zig");
 
-fn tree(T: type) !T {
+fn treeParse(T: type) !T {
     try main.tree.add("");
     try main.tree.commit();
     return main.tree.parse(T);
@@ -26,111 +26,175 @@ fn subscribe(events: []const u8) !void {
     try main.subscribe.discard();
 }
 
+fn eql(first: []const u8, second: []const u8) bool {
+    return std.mem.eql(u8, first, second);
+}
+
+const Focused = union(enum) {
+    workspace: struct { u32, u32 },
+    container_tiled: struct { u32, u32, u32 },
+    container_float: struct { u32, u32, u32 },
+    column_tiled: struct { u32, u32, u32 },
+    column_float: struct { u32, u32, u32 },
+    window_tiled: struct { u32, u32, u32, u32 },
+    window_float: struct { u32, u32, u32, u32 },
+};
+
+fn u32Tuple(index: usize) struct { u32 } {
+    return .{@intCast(index)};
+}
+
+fn focused(tree: anytype) ?Focused {
+    for (tree.nodes, 0..) |output, output_index| {
+        const indices_0 = .{@as(u32, @intCast(output_index))};
+        for (output.nodes, 0..) |workspace, workspace_index| {
+            const indices_0_1 = indices_0 ++ u32Tuple(workspace_index);
+            if (workspace.focused) return .{ .workspace = indices_0_1 };
+            for (workspace.floating_nodes, 0..) |column_float, column_float_index| {
+                const indices_0_1_2 = indices_0_1 ++ u32Tuple(column_float_index);
+                if (column_float.focused) {
+                    if (column_float.nodes.len == 0) return .{ .container_float = indices_0_1_2 };
+                    return .{ .column_float = indices_0_1_2 };
+                }
+                for (column_float.nodes, 0..) |window_float, window_float_index| {
+                    const indices_0_1_2_3 = indices_0_1_2 ++ u32Tuple(window_float_index);
+                    if (window_float.focused) return .{ .window_float = indices_0_1_2_3 };
+                }
+            }
+            for (workspace.nodes, 0..) |column, column_index| {
+                const indices_0_1_2 = indices_0_1 ++ u32Tuple(column_index);
+                if (column.focused) {
+                    if (column.nodes.len == 0) return .{ .container_tiled = indices_0_1_2 };
+                    return .{ .column_tiled = indices_0_1_2 };
+                }
+                for (column.nodes, 0..) |window, window_index| {
+                    const indices_0_1_2_3 = indices_0_1_2 ++ u32Tuple(window_index);
+                    if (window.focused) return .{ .window_tiled = indices_0_1_2_3 };
+                }
+            }
+        }
+    }
+    return null;
+}
+
 pub const Direction = enum { left, right, up, down };
 
 pub fn move(direction: Direction) !void {
-    const Root = struct {
-        nodes: []const Output,
-        const Output = struct { nodes: []const Workspace };
-        const Workspace = struct { focused: bool, nodes: []const Column, floating_nodes: []const Column };
-        const Column = struct { focused: bool, id: u32, nodes: []const Window };
-        const Window = struct { focused: bool };
+    const Window = struct { focused: bool };
+    const Column = struct { nodes: []const Window, focused: bool, id: u32 };
+    const Workspace = struct {
+        nodes: []const Column,
+        floating_nodes: []const Column,
+        focused: bool,
     };
-    const Focused = union(enum) {
-        column_tiled: struct { []const Root.Column, usize },
-        window_tiled: struct { []const Root.Column, usize, []const Root.Window, usize },
-        window_float: struct { []const Root.Window, usize },
-    };
-    const focused: Focused = loop: for ((try tree(Root)).nodes) |output| {
-        for (output.nodes) |workspace| {
-            if (workspace.focused) return;
-            for (workspace.nodes, 0..) |column, column_index| {
-                if (column.focused)
-                    break :loop .{ .column_tiled = .{ workspace.nodes, column_index } };
-                for (column.nodes, 0..) |window, window_index|
-                    if (window.focused) {
-                        const window_tiled = .{ workspace.nodes, column_index, column.nodes, window_index };
-                        break :loop .{ .window_tiled = window_tiled };
-                    };
-            }
-            for (workspace.floating_nodes) |column_float| {
-                if (column_float.focused) return;
-                for (column_float.nodes, 0..) |window_float, window_float_index|
-                    if (window_float.focused)
-                        break :loop .{ .window_float = .{ column_float.nodes, window_float_index } };
-            }
-        }
-    } else return;
-    switch (focused) {
-        .column_tiled => |location| {
-            const columns, const column_index = location;
+    const Output = struct { nodes: []const Workspace };
+    const tree = try treeParse(struct { nodes: []const Output });
+    switch (focused(tree) orelse return) {
+        .column_tiled => |indices| {
+            const columns = tree.nodes[indices.@"0"].nodes[indices.@"1"].nodes;
             const swap_index = switch (direction) {
-                .left => if (column_index > 0) column_index - 1 else return,
-                .right => if (column_index < columns.len - 1) column_index + 1 else return,
+                .left => if (indices.@"2" > 0) indices.@"2" - 1 else return,
+                .right => if (indices.@"2" < columns.len - 1) indices.@"2" + 1 else return,
                 else => return,
             };
             return runPrint("swap container with con_id {};", .{columns[swap_index].id});
         },
-        .window_tiled => |location| {
-            const columns, const column_index, const windows, const window_index = location;
+        .window_tiled => |indices| {
+            const columns = tree.nodes[indices.@"0"].nodes[indices.@"1"].nodes;
+            const windows = columns[indices.@"2"].nodes;
             switch (direction) {
-                .up => if (window_index > 0) return run("move up;"),
-                .down => if (window_index < windows.len - 1) return run("move down;"),
-                .left => if (column_index > 0 or windows.len > 1) return run("move left;"),
+                .up => if (indices.@"3" > 0) return run("move up;"),
+                .down => if (indices.@"3" < windows.len - 1) return run("move down;"),
+                .left => if (indices.@"2" > 0 or windows.len > 1) return run("move left;"),
                 .right => {
-                    if (column_index < columns.len - 1) return run("move right, move down;");
+                    if (indices.@"2" < columns.len - 1) return run("move right, move down;");
                     if (windows.len > 1) return run("move right;");
                 },
             }
         },
-        .window_float => |location| {
-            const windows, const window_index = location;
+        .window_float => |indices| {
+            const windows = tree.nodes[indices.@"0"].nodes[indices.@"1"].nodes[indices.@"2"].nodes;
             switch (direction) {
-                .up => if (window_index > 0) return run("move up;"),
-                .down => if (window_index < windows.len - 1) return run("move down;"),
+                .up => if (indices.@"3" > 0) return run("move up;"),
+                .down => if (indices.@"3" < windows.len - 1) return run("move down;"),
                 else => return,
             }
         },
+        .workspace, .container_tiled, .container_float, .column_float => return,
     }
+}
+
+pub fn moveWorkspace(target: enum { name, number }, identifier: []const u8) !void {
+    const Window = struct { focused: bool, id: u32 };
+    const Column = struct { nodes: []const Window, focused: bool, id: u32 };
+    const Workspace = struct {
+        nodes: []const Column,
+        floating_nodes: []const Column,
+        focused: bool,
+        name: []const u8,
+        num: ?i32 = null,
+    };
+    const Output = struct { nodes: []const Workspace };
+    const tree = try treeParse(struct { nodes: []const Output });
+    const target_container_count = cases: switch (target) {
+        .name => {
+            for (tree.nodes) |output|
+                for (output.nodes) |workspace|
+                    if (eql(workspace.name, identifier)) break :cases workspace.nodes.len;
+            break :cases null;
+        },
+        .number => {
+            const number_parsed = std.fmt.parseUnsigned(u32, identifier, 10) catch
+                return error.NumberInvalid;
+            for (tree.nodes) |output|
+                for (output.nodes) |workspace|
+                    if (workspace.num orelse continue == number_parsed)
+                        break :cases workspace.nodes.len;
+            break :cases null;
+        },
+    };
+    const specifier = switch (target) {
+        .name => "",
+        .number => "number",
+    };
+    switch (focused(tree) orelse return) {
+        .column_tiled => |indices| {
+            const column = tree.nodes[indices.@"0"].nodes[indices.@"1"].nodes[indices.@"2"];
+            const count = target_container_count orelse 0;
+            if (count == 0) {
+                return runPrint(
+                    "[con_id = {}] move workspace {s} {s};" ++
+                        "[con_id = {}] layout splith, layout splitv;",
+                    .{ column.id, specifier, identifier, column.nodes[0].id },
+                );
+            }
+            try main.run.addPrint(
+                "[con_id = {}] move workspace {s} {s};",
+                .{ column.id, specifier, identifier },
+            );
+            for (0..count) |_|
+                try main.run.addPrint("[con_id = {}] move right,", .{column.id});
+            return main.run.commit();
+        },
+        .workspace => if (target_container_count orelse 0 != 0) return,
+        else => {},
+    }
+    return runPrint("move workspace {s} {s};", .{ specifier, identifier });
 }
 
 pub const Target = enum { window, column, workspace, toggle };
 
 pub fn focus(target: Target) !void {
-    const Root = struct {
-        nodes: []const Output,
-        const Output = struct { nodes: []const Workspace };
-        const Workspace = struct { focused: bool, nodes: []const Column, floating_nodes: []const Column };
-        const Column = struct { focused: bool, nodes: []const Window };
-        const Window = struct { focused: bool };
+    const Window = struct { focused: bool };
+    const Column = struct { nodes: []const Window, focused: bool };
+    const Workspace = struct {
+        nodes: []const Column,
+        floating_nodes: []const Column,
+        focused: bool,
     };
-    const Focused = enum {
-        workspace,
-        column_tiled,
-        window_tiled,
-        container_float,
-        column_float,
-        window_float,
-    };
-    const focused: Focused = loop: for ((try tree(Root)).nodes) |output| {
-        for (output.nodes) |workspace| {
-            if (workspace.focused) break :loop .workspace;
-            for (workspace.nodes) |column| {
-                if (column.focused) break :loop .column_tiled;
-                for (column.nodes) |window|
-                    if (window.focused) break :loop .window_tiled;
-            }
-            for (workspace.floating_nodes) |column_float| {
-                if (column_float.focused) {
-                    if (column_float.nodes.len == 0) break :loop .container_float;
-                    break :loop .column_float;
-                }
-                for (column_float.nodes) |window_float|
-                    if (window_float.focused) break :loop .window_float;
-            }
-        }
-    } else return;
-    switch (focused) {
+    const Output = struct { nodes: []const Workspace };
+    const tree = try treeParse(struct { nodes: []const Output });
+    switch (focused(tree) orelse return) {
         .workspace => switch (target) {
             .window, .toggle => return run("focus child, focus child;"),
             .column => return run("focus child;"),
@@ -146,7 +210,7 @@ pub fn focus(target: Target) !void {
             .column, .toggle => return run("focus parent;"),
             .workspace => return run("focus parent, focus parent;"),
         },
-        .container_float => switch (target) {
+        .container_tiled, .container_float => switch (target) {
             .window, .column => return,
             .workspace, .toggle => return run("focus parent;"),
         },
@@ -156,48 +220,20 @@ pub fn focus(target: Target) !void {
 pub const Mode = enum { splitv, stacking, toggle };
 
 pub fn layout(mode: Mode) !void {
-    const Root = struct {
-        nodes: []const Output,
-        const Output = struct { nodes: []const Workspace };
-        const Workspace = struct { focused: bool, nodes: []const Column, floating_nodes: []const Column };
-        const Column = struct { focused: bool, nodes: []const Window };
-        const Window = struct { focused: bool };
+    const Window = struct { focused: bool };
+    const Column = struct { nodes: []const Window, focused: bool };
+    const Workspace = struct {
+        nodes: []const Column,
+        floating_nodes: []const Column,
+        focused: bool,
     };
-    const Focused = enum {
-        container_tiled,
-        column_tiled,
-        window_tiled,
-        container_float,
-        column_float_one_window,
-        window_float,
-    };
-    const focused: Focused = loop: for ((try tree(Root)).nodes) |output| {
-        for (output.nodes) |workspace| {
-            if (workspace.focused) return;
-            for (workspace.nodes) |column| {
-                if (column.focused) {
-                    if (column.nodes.len == 0) break :loop .container_tiled;
-                    break :loop .column_tiled;
-                }
-                for (column.nodes) |window|
-                    if (window.focused) break :loop .window_tiled;
-            }
-            for (workspace.floating_nodes) |column_float| {
-                if (column_float.focused) switch (column_float.nodes.len) {
-                    0 => break :loop .container_float,
-                    1 => break :loop .column_float_one_window,
-                    else => return,
-                };
-                for (column_float.nodes) |window_float|
-                    if (window_float.focused) break :loop .window_float;
-            }
-        }
-    } else return;
+    const Output = struct { nodes: []const Workspace };
+    const tree = try treeParse(struct { nodes: []const Output });
     switch (mode) {
         inline else => |mode_inline| {
             const toggle = "layout toggle splitv stacking;";
             const set = "layout " ++ @tagName(mode_inline) ++ ";";
-            const command = switch (focused) {
+            const command = cases: switch (focused(tree) orelse return) {
                 .container_tiled => switch (mode_inline) {
                     .toggle => "layout toggle stacking splitv;",
                     .splitv, .stacking => set,
@@ -214,14 +250,20 @@ pub fn layout(mode: Mode) !void {
                     .toggle => "split v; " ++ toggle,
                     .splitv, .stacking => "split v; " ++ set,
                 },
-                .column_float_one_window => switch (mode_inline) {
-                    .toggle, .splitv => "focus child; split n",
-                    .stacking => return,
+                .column_float => |indices| {
+                    const windows = tree.nodes[indices.@"0"].nodes[indices.@"1"]
+                        .floating_nodes[indices.@"2"].nodes;
+                    if (windows.len != 1) return;
+                    switch (mode_inline) {
+                        .toggle, .splitv => break :cases "focus child; split n",
+                        .stacking => return,
+                    }
                 },
                 .window_float => switch (mode_inline) {
                     .toggle, .splitv => "split n;",
                     .stacking => return,
                 },
+                .workspace => return,
             };
             return run(command);
         },
@@ -230,31 +272,37 @@ pub fn layout(mode: Mode) !void {
 
 fn tile() !void {
     @branchHint(.likely);
-    const Root = struct {
-        nodes: []const Output,
-        const Output = struct { nodes: []const Workspace };
-        const Workspace = struct { nodes: []const Column };
-        const Column = struct { id: u32, layout: []const u8, nodes: []const Window };
-        const Window = struct { layout: []const u8, id: u32 };
-    };
-    for ((try tree(Root)).nodes) |output|
+    const Window = struct { id: u32, layout: []const u8 };
+    const Column = struct { nodes: []const Window, id: u32, layout: []const u8 };
+    const Workspace = struct { nodes: []const Column, orientation: []const u8 };
+    const Output = struct { nodes: []const Workspace };
+    const tree = try treeParse(struct { nodes: []const Output });
+    for (tree.nodes) |output|
         for (output.nodes) |workspace|
             for (workspace.nodes) |column| {
-                const singular_window = workspace.nodes.len == 1 and column.nodes.len == 1;
-                if (singular_window and std.mem.eql(u8, column.layout, "splitv")) {
+                const window_to_unsplit =
+                    workspace.nodes.len == 1 and
+                    column.nodes.len == 1 and
+                    eql(column.layout, "splitv");
+                if (window_to_unsplit) {
                     try main.run.addPrint("[con_id = {}] split n;", .{column.nodes[0].id});
                     break;
                 }
-                if (workspace.nodes.len >= 2 and std.mem.eql(u8, column.layout, "none")) {
+                const workspace_is_vertical =
+                    workspace.nodes.len == 1 and
+                    eql(workspace.orientation, "vertical");
+                if (workspace_is_vertical) {
+                    try main.run.addPrint("[con_id = {}] split h;", .{column.id});
+                    break;
+                }
+                const windows_to_split =
+                    workspace.nodes.len >= 2 and
+                    eql(column.layout, "none") and
+                    !eql(workspace.orientation, "vertical");
+                if (windows_to_split) {
                     try main.run.addPrint("[con_id = {}] split v;", .{column.id});
                     continue;
                 }
-                for (column.nodes) |window|
-                    if (!std.mem.eql(u8, window.layout, "none")) { // eject nested
-                        @branchHint(.unlikely);
-                        for (0..workspace.nodes.len) |_|
-                            try main.run.addPrint("[con_id = {}] move right;", .{window.id});
-                    };
             };
     if (main.run.lengthWrite() == 0) return;
     try main.run.commit();
@@ -271,21 +319,21 @@ fn dragReset(mod: Modifier) !void {
 }
 
 inline fn drag(mod: Modifier) !void {
-    const Root = struct {
-        nodes: []const Output,
-        const Output = struct { nodes: []const Workspace };
-        const Workspace = struct { focused: bool, floating_nodes: []const Column };
-        const Column = struct { focused: bool, nodes: []const Window };
-        const Window = struct { focused: bool };
+    const Window = struct { focused: bool };
+    const Column = struct { nodes: []const Window, focused: bool };
+    const Workspace = struct {
+        nodes: []const Column,
+        floating_nodes: []const Column,
+        focused: bool,
     };
-    const state: HotkeyState = loop: for ((try tree(Root)).nodes) |output| {
-        for (output.nodes) |workspace|
-            for (workspace.floating_nodes) |column_float| {
-                if (column_float.focused) break :loop .unset;
-                for (column_float.nodes) |window_float|
-                    if (window_float.focused) break :loop .unset;
-            };
-    } else .set;
+    const Output = struct { nodes: []const Workspace };
+    const tree = try treeParse(struct { nodes: []const Output });
+    const state: HotkeyState = block: {
+        switch (focused(tree) orelse break :block .set) {
+            .column_float, .window_float => break :block .unset,
+            else => break :block .set,
+        }
+    };
     if (state != state_previous) switch (mod) {
         inline else => |mod_inline| {
             const button = @tagName(mod_inline) ++ "+button1 ";
@@ -299,31 +347,28 @@ inline fn drag(mod: Modifier) !void {
                 "'mark --add _swaycolumns_drop; exec swaycolumns drop';";
             const command, const current_state: HotkeyState =
                 if (state == .unset) .{ unset, .unset } else .{ set, .set };
-            try run(command);
-            state_previous = current_state;
+            defer state_previous = current_state;
+            return run(command);
         },
     };
 }
 
 pub fn drop() !void {
-    const Root = struct {
-        nodes: []const Output,
-        const Output = struct { nodes: []const Workspace };
-        const Workspace = struct { nodes: []const Column };
-        const Column = struct { id: u32, nodes: []const Window };
-        const Window = struct { marks: []const []const u8 };
-    };
-    const DropAction = enum { move, swap };
-    const action: DropAction = outer: for ((try tree(Root)).nodes) |output| {
+    const Window = struct { marks: []const []const u8 };
+    const Column = struct { nodes: []const Window, id: u32 };
+    const Workspace = struct { nodes: []const Column };
+    const Output = struct { nodes: []const Workspace };
+    const tree = try treeParse(struct { nodes: []const Output });
+    const action: enum { move, swap } = outer: for (tree.nodes) |output| {
         for (output.nodes) |workspace|
             for (workspace.nodes) |column| {
                 const drag_column = inner: for (column.nodes) |window| {
                     for (window.marks) |mark|
-                        if (std.mem.eql(u8, mark, "_swaycolumns_drag")) break :inner column.id;
+                        if (eql(mark, "_swaycolumns_drag")) break :inner column.id;
                 } else continue;
                 const drop_column = inner: for (column.nodes) |window| {
                     for (window.marks) |mark|
-                        if (std.mem.eql(u8, mark, "_swaycolumns_drop")) break :inner column.id;
+                        if (eql(mark, "_swaycolumns_drop")) break :inner column.id;
                 } else continue;
                 if (drag_column == drop_column) break :outer .swap else return;
             };
@@ -353,16 +398,16 @@ pub fn start(mod_or_null: ?Modifier) !void {
     while (true) {
         defer main.fba.reset();
         const event = try main.subscribe.parse(struct { change: []const u8 });
-        if (std.mem.eql(u8, event.change, "reload")) {
+        if (eql(event.change, "reload")) {
             @branchHint(.unlikely);
             return reload(mod_or_null);
         }
         const tree_changed =
-            std.mem.eql(u8, event.change, "focus") or
-            std.mem.eql(u8, event.change, "floating") or
-            std.mem.eql(u8, event.change, "new") or
-            std.mem.eql(u8, event.change, "close") or
-            std.mem.eql(u8, event.change, "move");
+            eql(event.change, "focus") or
+            eql(event.change, "new") or
+            eql(event.change, "close") or
+            eql(event.change, "move") or
+            eql(event.change, "floating");
         if (tree_changed) {
             try tile();
             if (mod_or_null) |mod| try drag(mod);
