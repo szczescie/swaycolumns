@@ -25,7 +25,7 @@ focus_follows_mouse  always
 tiling_drag          disable
 floating_modifier    super normal
 
-bindsym {
+bindsym --no-repeat {
     super+shift+right  exec swaycolumns move right
     super+shift+left   exec swaycolumns move left
     super+shift+up     exec swaycolumns move up
