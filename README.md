@@ -26,9 +26,7 @@
 
 ## Configuration
 
-<p>
-Including these options and keybinds is highly recommended.
-</p>
+ Including these options and keybinds is highly recommended. Invocations of `swaycolumns` should be preferred over commands provided by Sway in order to avoid unexpected behaviour.
 
 ```
 default_orientation  horizontal
@@ -81,5 +79,5 @@ Usage: swaycolumns [command] [parameter]
 
 ```console
 ❯ zig build -Doptimize=ReleaseFast --prefix ~/.local
-❯ fish_add_path ~/.local/bin
+❯ export PATH=$PATH:~/.local/bin
 ```
