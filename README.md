@@ -1,23 +1,34 @@
-## Installation
-
-```console
-❯ zig build -Doptimize=ReleaseFast --prefix ~/.local
-❯ fish_add_path ~/.local/bin
-```
-
 ## Usage
-```console
-❯ swaycolumns --help
-Usage: swaycolumns [command] [parameter]
 
-  start [modifier]                  Start the background process and set a floating modifier.
-  move <direction>                  Move windows or swap columns.
-  move workspace [number] <name>    Move window or column to workspace.
-  focus <target>                    Focus window, column or workspace.
-  layout <mode>                     Switch column layout to splitv or stacking.
+* First window in the workspace is opened as usual.
+* Second window will appear to the right of the first window.
+* All subsequent windows will appear below the currently focused one and create a column of windows.
+<br><br>
+* Use `swaycolumns move up` and `swaycolumns move down` to move the window within the column.
+* Use `swaycolumns move left` and `swaycolumns move right` to move the window between columns.
+* Moving a window in the direction of the screen edge creates a new column.
+<br><br>
+* Use `swaycolumns layout toggle` to cycle between split and stacking layout of the column.
+* This also works on floating windows.
+* Moving windows within and between columns works regardless of layout.
+<br><br>
+* Use `swaycolumns focus toggle` to cycle between window, column and workspace focus.
+* This too works on floating windows.
+* If a column is focused, moving it will swap it with the neighbouring column.
+<br><br>
+* Use `swaycolumns move workspace` to move the window, column or everything to another workspace.
+* Moved windows will be inserted into columns while moved columns will appear on the right.
+* Workspace selection is prevented from being moved to a non-empty workspace.
+<br><br>
+* Specify the floating modifer in the CLI and the config file in order to use a simplified window dragging mechanic.
+* Hold the modifier and drag with the left mouse button over two windows within the same column to swap them.
+* Drag over two windows in diffrent columns to move the first window into the second column.
 
-  -h, --help                        Print this message and quit.
-```
+## Configuration
+
+<p>
+Including these options and keybinds is highly recommended.
+</p>
 
 ```
 default_orientation  horizontal
@@ -51,5 +62,24 @@ exec {
 }
 ```
 
-## Dog
-<img src="dog.jpg" alt="dog" width="400"/>
+## CLI
+
+```console
+❯ swaycolumns --help
+Usage: swaycolumns [command] [parameter]
+
+  start [modifier]                  Start the background process and set a floating modifier.
+  move <direction>                  Move windows or swap columns.
+  move workspace [number] <name>    Move window or column to workspace.
+  focus <target>                    Focus window, column or workspace.
+  layout <mode>                     Switch column layout to splitv or stacking.
+
+  -h, --help                        Print this message and quit.
+```
+
+## Installation
+
+```console
+❯ zig build -Doptimize=ReleaseFast --prefix ~/.local
+❯ fish_add_path ~/.local/bin
+```
