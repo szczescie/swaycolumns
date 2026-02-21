@@ -47,7 +47,7 @@ fn u32Tuple(index: usize) struct { u32 } {
 
 fn focused(tree: anytype) ?Indices {
     for (tree.nodes, 0..) |output, output_index| {
-        const indices_0 = .{@as(u32, @intCast(output_index))};
+        const indices_0 = u32Tuple(output_index);
         for (output.nodes, 0..) |workspace, workspace_index| {
             const indices_0_1 = indices_0 ++ u32Tuple(workspace_index);
             if (workspace.focused) return .{ .workspace = indices_0_1 };
@@ -137,21 +137,21 @@ pub fn moveWorkspace(target: enum { name, number }, identifier: []const u8) !voi
     };
     const Output = struct { nodes: []const Workspace };
     const tree = try treeParse(struct { nodes: []const Output });
-    const target_container_count = cases: switch (target) {
-        .name => {
+    const target_container_count = switch (target) {
+        .name => block: {
             for (tree.nodes) |output|
                 for (output.nodes) |workspace|
-                    if (eql(workspace.name, identifier)) break :cases workspace.nodes.len;
-            break :cases null;
+                    if (eql(workspace.name, identifier)) break :block workspace.nodes.len;
+            break :block null;
         },
-        .number => {
+        .number => block: {
             const number_parsed = std.fmt.parseUnsigned(u32, identifier, 10) catch
                 return error.NumberInvalid;
             for (tree.nodes) |output|
                 for (output.nodes) |workspace|
                     if (workspace.num orelse continue == number_parsed)
-                        break :cases workspace.nodes.len;
-            break :cases null;
+                        break :block workspace.nodes.len;
+            break :block null;
         },
     };
     const specifier = switch (target) {
@@ -234,7 +234,7 @@ pub fn layout(mode: Mode) !void {
         inline else => |mode_inline| {
             const toggle = "layout toggle splitv stacking;";
             const set = "layout " ++ @tagName(mode_inline) ++ ";";
-            const command = cases: switch (focused(tree) orelse return) {
+            const command = switch (focused(tree) orelse return) {
                 .container_tiled => switch (mode_inline) {
                     .toggle => "layout toggle stacking splitv;",
                     .splitv, .stacking => set,
@@ -251,12 +251,12 @@ pub fn layout(mode: Mode) !void {
                     .toggle => "split v; " ++ toggle,
                     .splitv, .stacking => "split v; " ++ set,
                 },
-                .column_float => |indices| {
+                .column_float => |indices| block: {
                     const windows = tree.nodes[indices.@"0"].nodes[indices.@"1"]
                         .floating_nodes[indices.@"2"].nodes;
                     if (windows.len != 1) return;
                     switch (mode_inline) {
-                        .toggle, .splitv => break :cases "focus child; split n;",
+                        .toggle, .splitv => break :block "focus child; split n;",
                         .stacking => return,
                     }
                 },
@@ -408,9 +408,8 @@ pub fn start(mod_or_null: ?Modifier) !void {
             eql(event.change, "close") or
             eql(event.change, "move") or
             eql(event.change, "floating");
-        if (tree_changed) {
-            try tile();
-            if (mod_or_null) |mod| try drag(mod);
-        }
+        if (!tree_changed) continue;
+        try tile();
+        if (mod_or_null) |mod| try drag(mod);
     }
 }
