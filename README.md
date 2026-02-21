@@ -20,8 +20,8 @@
 * Moved windows will be inserted into columns while moved columns will appear on the right.
 * Workspace selection is prevented from being moved to a non-empty workspace.
 <br><br>
-* Specify the floating modifer in the CLI and the config file in order to use a simplified window dragging mechanic.
-* Hold the modifier and drag with the left mouse button over two windows within the same column to swap them.
+* Specify the floating modifer in order to use a simplified window dragging mechanic.
+* Hold the modifier and drag with LMB over two windows within the same column to swap them.
 * Drag over two windows in diffrent columns to move the first window into the second column.
 
 ## Configuration
