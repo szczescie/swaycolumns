@@ -332,7 +332,7 @@ inline fn drag(mod: Modifier) !void {
     const tree = try treeParse(struct { nodes: []const Output });
     const state: HotkeyState = block: {
         switch (focused(tree) orelse break :block .set) {
-            .column_float, .window_float => break :block .unset,
+            .container_float, .column_float, .window_float => break :block .unset,
             else => break :block .set,
         }
     };
