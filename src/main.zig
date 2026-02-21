@@ -19,7 +19,7 @@ fn socket(message_type: MessageType, len_write: usize, len_read: usize) type {
         var writer: std.net.Stream.Writer = undefined;
         var reader: std.net.Stream.Reader = undefined;
 
-        pub fn init() void {
+        fn init() void {
             const socket_path = std.posix.getenv("SWAYSOCK") orelse
                 std.process.fatal("SWAYSOCK is not set", .{});
             const stream = std.net.connectUnixSocket(socket_path) catch |err|
@@ -30,11 +30,11 @@ fn socket(message_type: MessageType, len_write: usize, len_read: usize) type {
                 std.process.fatal("unable to write to socket ({})", .{err});
         }
 
-        pub fn deinit() void {
+        fn deinit() void {
             std.net.Stream.Reader.getStream(&reader).close();
         }
 
-        pub fn reconnect() void {
+        fn reconnect() void {
             deinit();
             init();
         }
