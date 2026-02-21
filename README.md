@@ -1,28 +1,34 @@
 ## Usage
 
-* First window in the workspace is opened as usual.
-* Second window will appear to the right of the first window.
-* All subsequent windows will appear below the currently focused one and create a column of windows.
-<br><br>
-* Use `swaycolumns move up` and `swaycolumns move down` to move the window within the column.
-* Use `swaycolumns move left` and `swaycolumns move right` to move the window between columns.
-* Moving a window in the direction of the screen edge creates a new column.
-<br><br>
-* Use `swaycolumns layout toggle` to cycle between split and stacking layout of the column.
-* This also works on floating windows.
-* Moving windows within and between columns works regardless of layout.
-<br><br>
-* Use `swaycolumns focus toggle` to cycle between window, column and workspace focus.
-* This too works on floating windows.
-* If a column is focused, moving it will swap it with the neighbouring column.
-<br><br>
-* Use `swaycolumns move workspace` to move the window, column or everything to another workspace.
-* Moved windows will be inserted into columns while moved columns will appear on the right.
-* Workspace selection is prevented from being moved to a non-empty workspace.
-<br><br>
-* Specify the floating modifer in order to use a simplified window dragging mechanic.
-* Hold the modifier and drag with LMB over two windows within the same column to swap them.
-* Drag over two windows in diffrent columns to move the first window into the second column.
+* Automatic actions
+    * First window in the workspace is opened as usual.
+    * Second window will appear to the right of the first window.
+    * All subsequent windows will appear below the currently focused one, creating a column.
+
+* `swaycolumns move`
+    * Use the parameters `up` and `down` to move the window within the column.
+    * Use `left` and `right` to move the window between columns.
+    * Moving a window in the direction of the screen edge creates a new column.
+
+* `swaycolumns layout`
+    * Use `toggle`, `splitv` or `stacking` to set the layout of the column.
+    * This also works on floating windows.
+    * Moving windows within and between columns works regardless of layout.
+
+* `swaycolumns focus`
+    * Use `toggle` `window`, `column` or `workspace` to set window, column and workspace focus.
+    * This too works on floating windows.
+    * If a column is focused, moving it will swap it with the neighbouring column.
+
+* `swaycolumns move workspace`
+    * Use it to move the window, column or everything to another workspace.
+    * Moved windows will be inserted into columns while moved columns will appear on the right.
+    * Workspace selection is prevented from being moved to a non-empty workspace.
+
+* Optional floating modifier
+    * Specify the modifer in order to use a simplified window dragging mechanic.
+    * Hold the modifier and drag with LMB over two windows within the same column to swap them.
+    * Drag over two windows in diffrent columns to move the first window into the second column.
 
 ## Configuration
 
