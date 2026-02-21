@@ -3,6 +3,7 @@ const std = @import("std");
 const main = @import("main.zig");
 
 fn treeParse(T: type) !T {
+    @branchHint(.likely);
     try main.tree.add("");
     try main.tree.commit();
     return main.tree.parse(T);
@@ -30,7 +31,7 @@ fn eql(first: []const u8, second: []const u8) bool {
     return std.mem.eql(u8, first, second);
 }
 
-const Focused = union(enum) {
+const Indices = union(enum) {
     workspace: struct { u32, u32 },
     container_tiled: struct { u32, u32, u32 },
     container_float: struct { u32, u32, u32 },
@@ -44,7 +45,7 @@ fn u32Tuple(index: usize) struct { u32 } {
     return .{@intCast(index)};
 }
 
-fn focused(tree: anytype) ?Focused {
+fn focused(tree: anytype) ?Indices {
     for (tree.nodes, 0..) |output, output_index| {
         const indices_0 = .{@as(u32, @intCast(output_index))};
         for (output.nodes, 0..) |workspace, workspace_index| {
@@ -255,7 +256,7 @@ pub fn layout(mode: Mode) !void {
                         .floating_nodes[indices.@"2"].nodes;
                     if (windows.len != 1) return;
                     switch (mode_inline) {
-                        .toggle, .splitv => break :cases "focus child; split n",
+                        .toggle, .splitv => break :cases "focus child; split n;",
                         .stacking => return,
                     }
                 },
@@ -319,6 +320,7 @@ fn dragReset(mod: Modifier) !void {
 }
 
 inline fn drag(mod: Modifier) !void {
+    @branchHint(.likely);
     const Window = struct { focused: bool };
     const Column = struct { nodes: []const Window, focused: bool };
     const Workspace = struct {
@@ -388,6 +390,7 @@ pub fn drop() !void {
 }
 
 inline fn reload(mod_or_null: ?Modifier) !void {
+    @branchHint(.unlikely);
     try tile();
     if (mod_or_null) |mod| try dragReset(mod);
 }
@@ -398,10 +401,7 @@ pub fn start(mod_or_null: ?Modifier) !void {
     while (true) {
         defer main.fba.reset();
         const event = try main.subscribe.parse(struct { change: []const u8 });
-        if (eql(event.change, "reload")) {
-            @branchHint(.unlikely);
-            return reload(mod_or_null);
-        }
+        if (eql(event.change, "reload")) return reload(mod_or_null);
         const tree_changed =
             eql(event.change, "focus") or
             eql(event.change, "new") or
