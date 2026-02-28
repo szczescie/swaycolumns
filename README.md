@@ -1,38 +1,36 @@
 ## Usage
 
 * Automatic actions
-    * First window in the workspace is opened as usual.
     * Second window will appear to the right of the first window.
     * All subsequent windows will appear below the currently focused one, creating a column.
 
 * `swaycolumns move`
     * Use the parameters `up` and `down` to move the window within the column.
-    * Use `left` and `right` to move the window between columns.
-    * Moving a window in the direction of the screen edge creates a new column.
+    * Use `left` and `right` to move the window between columns or create new ones.
+
+* `swaycolumns move workspace`
+    * Use it to move the window, column or everything to another workspace.
+    * Workspace selection is prevented from being moved to a non-empty workspace.
+
+* `swaycolumns focus`
+    * Use `toggle` `window`, `column` or `workspace` to set window, column and workspace focus.
+    * If a column is focused, moving it will swap it with the neighbouring column.
 
 * `swaycolumns layout`
     * Use `toggle`, `splitv` or `stacking` to set the layout of the column.
     * This also works on floating windows.
-    * Moving windows within and between columns works regardless of layout.
 
-* `swaycolumns focus`
-    * Use `toggle` `window`, `column` or `workspace` to set window, column and workspace focus.
-    * This too works on floating windows.
-    * If a column is focused, moving it will swap it with the neighbouring column.
-
-* `swaycolumns move workspace`
-    * Use it to move the window, column or everything to another workspace.
-    * Moved windows will be inserted into columns while moved columns will appear on the right.
-    * Workspace selection is prevented from being moved to a non-empty workspace.
+* `swaycolumns floating`
+    * Use `toggle`, `enable` or `disable` to change the floating state.
+    * Workspaces and non-stacked columns are prevented from floating.
 
 * Optional floating modifier
     * Specify the modifer in order to use a simplified window dragging mechanic.
-    * Hold the modifier and drag with LMB over two windows within the same column to swap them.
-    * Drag over two windows in diffrent columns to move the first window into the second column.
+    * Windows can be moved within columns or swapped between them without precise movements.
 
 ## Configuration
 
- Including these options and keybinds is highly recommended. Invocations of `swaycolumns` should be preferred over commands provided by Sway in order to avoid unexpected behaviour.
+Including these options and commands is recommended. Invocations of `swaycolumns` should be preferred over commands provided by Sway in order to avoid unexpected behaviour. 
 
 ```
 default_orientation  horizontal
@@ -57,7 +55,8 @@ bindsym --no-repeat {
     super+shift+9  exec swaycolumns move workspace number 9
     super+shift+0  exec swaycolumns move workspace number 10
 
-    super+v  exec swaycolumns focus  toggle
+    super+c  exec swaycolumns floating toggle
+    super+v  exec swaycolumns focus toggle
     super+b  exec swaycolumns layout toggle
 }
 
@@ -70,15 +69,23 @@ exec {
 
 ```console
 ❯ swaycolumns --help
-Usage: swaycolumns [command] [parameter]
+Usage: swaycolumns [option] <command>
 
-  start [modifier]                  Start the background process and set a floating modifier.
-  move <direction>                  Move windows or swap columns.
-  move workspace [number] <name>    Move window or column to workspace.
-  focus <target>                    Focus window, column or workspace.
-  layout <mode>                     Switch column layout to splitv or stacking.
+Commands:
 
-  -h, --help                        Print this message and quit.
+  start                             Start the background process
+  start <modifier>                  Start the background process and set a floating modifier
+  move <direction>                  Move windows or swap columns
+  move workspace <name>             Move a window or column to a named workspace
+  move workspace number <number>    Move a window or column to an indexed workspace
+  focus <target>                    Focus a window, column or workspace
+  layout <mode>                     Switch the column layout to splitv or stacking
+  floating <state>                  Switch the window or stacked column's floating state.
+
+Options:
+
+  -m, --memory                      Change the amount of bytes allocated at startup (default: 1Mib)
+  -h, --help                        Print this message and exit
 ```
 
 ## Installation
