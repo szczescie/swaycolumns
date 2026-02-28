@@ -108,11 +108,12 @@ const help_text =
     \\  move workspace number <number>    Move a window or column to an indexed workspace
     \\  focus <target>                    Focus a window, column or workspace
     \\  layout <mode>                     Switch the column layout to splitv or stacking
-    \\  floating <state>                  Switch the window or stacked column's floating state.
+    \\  floating <state>                  Switch the window or stacked column's floating state
     \\
     \\Options:
     \\
-    \\  -m, --memory                      Change the amount of bytes allocated at startup (default: 1Mib)
+    \\  -m, --memory <bytes>              Change the amount of bytes allocated at startup
+    \\                                    (default: 1048576)
     \\  -h, --help                        Print this message and exit
 ;
 
@@ -145,7 +146,7 @@ pub fn main() !void {
     var iterator = std.process.args();
     _ = iterator.skip();
     const command_tag, const memory = b: {
-        var memory: usize = 1024 * 1024;
+        var memory: usize = 1048576;
         while (iterator.next()) |argument| {
             const option = std.meta.stringToEnum(Option, argument) orelse {
                 const command_tag = std.meta.stringToEnum(std.meta.Tag(Command), argument) orelse

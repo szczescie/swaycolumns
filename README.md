@@ -80,11 +80,12 @@ Commands:
   move workspace number <number>    Move a window or column to an indexed workspace
   focus <target>                    Focus a window, column or workspace
   layout <mode>                     Switch the column layout to splitv or stacking
-  floating <state>                  Switch the window or stacked column's floating state.
+  floating <state>                  Switch the window or stacked column's floating state
 
 Options:
 
-  -m, --memory                      Change the amount of bytes allocated at startup (default: 1Mib)
+  -m, --memory <bytes>              Change the amount of bytes allocated at startup
+                                    (default: 1048576)
   -h, --help                        Print this message and exit
 ```
 
