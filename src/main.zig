@@ -101,8 +101,8 @@ const help_text =
     \\
     \\Commands:
     \\
-    \\  start                             Start the background process
-    \\  start <modifier>                  Start the background process and set a floating modifier
+    \\  start                             Start the process without affecting window dragging
+    \\  start <modifier>                  Start the process and set a floating modifier
     \\  move <direction>                  Move windows or swap columns
     \\  move workspace <name>             Move a window or column to a named workspace
     \\  move workspace number <number>    Move a window or column to an indexed workspace
@@ -112,8 +112,7 @@ const help_text =
     \\
     \\Options:
     \\
-    \\  -m, --memory <bytes>              Change the amount of bytes allocated at startup
-    \\                                    (default: 1048576)
+    \\  -m, --memory <bytes>              Amount of bytes allocated at startup (default: 1048576)
     \\  -h, --help                        Print this message and exit
 ;
 

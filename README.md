@@ -73,7 +73,7 @@ Usage: swaycolumns [option] <command>
 
 Commands:
 
-  start                             Start the background process
+  start                             Start the process without affecting window dragging
   start <modifier>                  Start the background process and set a floating modifier
   move <direction>                  Move windows or swap columns
   move workspace <name>             Move a window or column to a named workspace
@@ -84,8 +84,7 @@ Commands:
 
 Options:
 
-  -m, --memory <bytes>              Change the amount of bytes allocated at startup
-                                    (default: 1048576)
+  -m, --memory <bytes>              Amount of bytes allocated at startup (default: 1048576)
   -h, --help                        Print this message and exit
 ```
 
