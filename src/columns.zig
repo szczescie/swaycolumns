@@ -363,15 +363,11 @@ fn tile() !void {
 
 pub const Modifier = enum { super, mod4, alt, mod1 };
 const HotkeyState = enum { set, unset, reset };
-var state_previous: HotkeyState = .unset;
+var state_previous: HotkeyState = .reset;
 
-fn dragReset(mod: Modifier) !void {
-    state_previous = .reset;
-    try drag(mod);
-}
-
-inline fn drag(mod: Modifier) !void {
+fn drag(mod_or_null: ?Modifier) !void {
     @branchHint(.likely);
+    const mod = mod_or_null orelse return;
     const Window = struct { focused: bool };
     const Column = struct { nodes: []const Window, focused: bool };
     const Workspace = struct {
@@ -440,34 +436,34 @@ pub fn drop() !void {
     }
 }
 
-inline fn reload(mod_or_null: ?Modifier) !void {
-    @branchHint(.unlikely);
+fn arrange(mod_or_null: ?Modifier) !void {
     try tile();
-    if (mod_or_null) |mod| try dragReset(mod);
+    try drag(mod_or_null);
 }
 
 pub const subscribed_events =
     \\["window", "workspace", "shutdown"]
 ;
+const Change = enum { focus, new, close, move, floating, reload, exit };
 
-pub fn start(mod_or_null: ?Modifier) !void {
+pub fn start(mod_or_null: ?Modifier) !noreturn {
     try subscribe(subscribed_events);
-    try reload(mod_or_null);
+    try arrange(mod_or_null);
     while (true) {
         defer main.fba.reset();
         const event = try main.subscribe.parse(struct { change: []const u8 });
-        if (eql(event.change, "reload")) {
-            try reload(mod_or_null);
-            continue;
-        }
-        const tree_changed =
-            eql(event.change, "new") or
-            eql(event.change, "close") or
-            eql(event.change, "move") or
-            eql(event.change, "floating");
-        if (tree_changed) {
-            try tile();
-            if (mod_or_null) |mod| try drag(mod);
+        switch (std.meta.stringToEnum(Change, event.change) orelse continue) {
+            .focus => {
+                try drag(mod_or_null);
+            },
+            .new, .close, .move, .floating => {
+                try arrange(mod_or_null);
+            },
+            .reload => {
+                state_previous = .reset;
+                try arrange(mod_or_null);
+            },
+            .exit => std.process.exit(0),
         }
     }
 }
